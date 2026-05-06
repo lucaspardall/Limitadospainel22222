@@ -11,7 +11,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/servers", label: "Servers", icon: HardDrive },
-    { href: "/users", label: "Users", icon: Users, adminOnly: true },
+    { href: "/users", label: "Panel Users", icon: Users, adminOnly: true },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 
