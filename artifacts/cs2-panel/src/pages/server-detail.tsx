@@ -693,9 +693,73 @@ function LogsTab({ serverId }: { serverId: number }) {
 }
 
 // ─── Console ─────────────────────────────────────────────────────────────────
+const QUICK_COMMANDS = [
+  {
+    category: "Partida",
+    cmds: [
+      { label: "Reiniciar Partida", cmd: "mp_restartgame 1" },
+      { label: "Encerrar Warmup", cmd: "mp_warmup_end" },
+      { label: "Iniciar Warmup", cmd: "mp_warmup_start" },
+      { label: "Intervalo", cmd: "mp_halftime" },
+      { label: "Pausar Servidor", cmd: "sv_pausable 1; pause" },
+      { label: "Retomar Servidor", cmd: "unpause" },
+    ],
+  },
+  {
+    category: "Bots",
+    cmds: [
+      { label: "Matar Todos Bots", cmd: "bot_kill" },
+      { label: "Kick Todos Bots", cmd: "bot_kick" },
+      { label: "Add Bot CT", cmd: "bot_add ct" },
+      { label: "Add Bot TR", cmd: "bot_add t" },
+      { label: "Dif. Fácil", cmd: "bot_difficulty 0" },
+      { label: "Dif. Médio", cmd: "bot_difficulty 2" },
+      { label: "Dif. Difícil", cmd: "bot_difficulty 3" },
+      { label: "Dif. Expert", cmd: "bot_difficulty 4" },
+    ],
+  },
+  {
+    category: "Regras",
+    cmds: [
+      { label: "FF Ligado", cmd: "mp_friendlyfire 1" },
+      { label: "FF Desligado", cmd: "mp_friendlyfire 0" },
+      { label: "Balanço Auto ON", cmd: "mp_autoteambalance 1" },
+      { label: "Balanço Auto OFF", cmd: "mp_autoteambalance 0" },
+      { label: "30 Rounds", cmd: "mp_maxrounds 30" },
+      { label: "24 Rounds", cmd: "mp_maxrounds 24" },
+      { label: "Sem Limite", cmd: "mp_maxrounds 0" },
+      { label: "Cheats ON", cmd: "sv_cheats 1" },
+      { label: "Cheats OFF", cmd: "sv_cheats 0" },
+    ],
+  },
+  {
+    category: "Jogadores",
+    cmds: [
+      { label: "Matar Todos", cmd: "mp_restartgame 1" },
+      { label: "Dar Dinheiro Max", cmd: "mp_afterroundmoney 16000" },
+      { label: "God Mode ON", cmd: "god" },
+      { label: "Noclip ON", cmd: "noclip" },
+      { label: "Mostrar HP", cmd: "sv_showimpacts 1" },
+      { label: "Ocultar HP", cmd: "sv_showimpacts 0" },
+    ],
+  },
+  {
+    category: "Servidor",
+    cmds: [
+      { label: "Status", cmd: "status" },
+      { label: "Stats", cmd: "stats" },
+      { label: "Listar Plugins", cmd: "sm plugins list" },
+      { label: "Recarregar Plugins", cmd: "sm plugins refresh" },
+      { label: "Recarregar Admins", cmd: "sm_reloadadmins" },
+      { label: "Versão", cmd: "version" },
+    ],
+  },
+];
+
 function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<{ type: "req" | "res"; text: string }[]>([]);
+  const [showQuick, setShowQuick] = useState(true);
   const rconMutation = useSendRconCommand();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -703,11 +767,8 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [history]);
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!command.trim() || !status?.online) return;
-    const cmd = command;
-    setCommand("");
+  const execCommand = (cmd: string) => {
+    if (!status?.online) return;
     setHistory(h => [...h, { type: "req", text: `> ${cmd}` }]);
     rconMutation.mutate({ serverId, data: { command: cmd } }, {
       onSuccess: (res: any) => setHistory(h => [...h, { type: "res", text: res.data?.response ?? "Comando executado." }]),
@@ -715,39 +776,112 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
     });
   };
 
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!command.trim() || !status?.online) return;
+    const cmd = command.trim();
+    setCommand("");
+    execCommand(cmd);
+  };
+
   return (
-    <Card className="bg-[#0a0a0c] border-border overflow-hidden flex flex-col h-[600px]">
-      <CardHeader className="py-3 px-4 border-b border-border/50 bg-black/40">
-        <CardTitle className="font-mono text-xs uppercase tracking-widest flex items-center text-primary">
-          <Terminal className="w-3 h-3 mr-2" /> RCON Terminal · {status?.online ? <span className="text-primary ml-2">ONLINE</span> : <span className="text-muted-foreground ml-2">OFFLINE</span>}
-        </CardTitle>
-      </CardHeader>
-      <ScrollArea className="flex-1" ref={scrollRef}>
-        <div className="p-4 font-mono text-xs leading-relaxed space-y-1">
-          <div className="text-muted-foreground mb-4">CS2 Remote Console — servidor {status?.online ? "ONLINE" : "OFFLINE"}.</div>
-          {history.map((entry, i) => (
-            <div key={i} className={cn("whitespace-pre-wrap", entry.type === "req" ? "text-primary mt-2" : "text-foreground opacity-80")}>
-              {entry.text}
+    <div className="space-y-4">
+      {/* Quick Commands Panel */}
+      <Card className="bg-card border-border overflow-hidden">
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/20 hover:bg-muted/30 transition-colors"
+          onClick={() => setShowQuick(v => !v)}
+          data-testid="btn-toggle-quickcmds"
+        >
+          <span className="font-mono text-xs uppercase tracking-widest text-primary flex items-center gap-2">
+            <Terminal className="w-3.5 h-3.5" /> Comandos Rápidos
+          </span>
+          <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+            {showQuick ? "▲ ocultar" : "▼ mostrar"}
+          </span>
+        </button>
+
+        {showQuick && (
+          <div className="p-4 space-y-4">
+            {QUICK_COMMANDS.map(({ category, cmds }) => (
+              <div key={category}>
+                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2 pb-1 border-b border-border/30">
+                  {category}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {cmds.map(({ label, cmd }) => (
+                    <button
+                      key={cmd}
+                      onClick={() => execCommand(cmd)}
+                      disabled={!status?.online || rconMutation.isPending}
+                      title={cmd}
+                      data-testid={`btn-qcmd-${cmd.replace(/\s+/g, "-")}`}
+                      className={cn(
+                        "group relative px-3 py-1.5 rounded border font-mono text-xs transition-all duration-100",
+                        "border-border/60 bg-muted/30 text-foreground",
+                        "hover:border-primary/60 hover:bg-primary/10 hover:text-primary",
+                        "disabled:opacity-40 disabled:cursor-not-allowed",
+                        "active:scale-95"
+                      )}
+                    >
+                      <span className="block">{label}</span>
+                      <span className="block text-[9px] text-muted-foreground group-hover:text-primary/70 truncate max-w-[120px]">{cmd}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Terminal */}
+      <Card className="bg-[#0a0a0c] border-border overflow-hidden flex flex-col h-[420px]">
+        <CardHeader className="py-3 px-4 border-b border-border/50 bg-black/40 flex-shrink-0">
+          <CardTitle className="font-mono text-xs uppercase tracking-widest flex items-center text-primary">
+            <Terminal className="w-3 h-3 mr-2" /> RCON Terminal ·{" "}
+            {status?.online
+              ? <span className="text-primary ml-1.5">ONLINE</span>
+              : <span className="text-muted-foreground ml-1.5">OFFLINE</span>}
+          </CardTitle>
+        </CardHeader>
+        <ScrollArea className="flex-1" ref={scrollRef}>
+          <div className="p-4 font-mono text-xs leading-relaxed space-y-1">
+            <div className="text-muted-foreground mb-3">
+              CS2 Remote Console — servidor {status?.online ? "ONLINE" : "OFFLINE"}.
             </div>
-          ))}
+            {history.map((entry, i) => (
+              <div key={i} className={cn("whitespace-pre-wrap", entry.type === "req" ? "text-primary mt-2" : "text-foreground/80")}>
+                {entry.text}
+              </div>
+            ))}
+            {rconMutation.isPending && (
+              <div className="text-muted-foreground animate-pulse">Aguardando resposta...</div>
+            )}
+          </div>
+        </ScrollArea>
+        <div className="p-3 border-t border-border/50 bg-black/40 flex-shrink-0">
+          <form onSubmit={onSubmit} className="flex gap-2">
+            <Input
+              value={command}
+              onChange={e => setCommand(e.target.value)}
+              disabled={!status?.online || rconMutation.isPending}
+              placeholder={status?.online ? "Digite um comando RCON..." : "Servidor offline"}
+              className="bg-transparent border-border/50 font-mono text-xs focus-visible:ring-primary/30"
+              data-testid="input-rcon"
+            />
+            <Button
+              type="submit"
+              disabled={!status?.online || rconMutation.isPending || !command.trim()}
+              className="font-mono text-xs uppercase tracking-wider"
+              data-testid="btn-rcon-send"
+            >
+              Executar
+            </Button>
+          </form>
         </div>
-      </ScrollArea>
-      <div className="p-3 border-t border-border/50 bg-black/40">
-        <form onSubmit={onSubmit} className="flex gap-2">
-          <Input
-            value={command}
-            onChange={e => setCommand(e.target.value)}
-            disabled={!status?.online || rconMutation.isPending}
-            placeholder={status?.online ? "Digite um comando RCON..." : "Servidor offline"}
-            className="bg-transparent border-border/50 font-mono text-xs focus-visible:ring-primary/30"
-            data-testid="input-rcon"
-          />
-          <Button type="submit" disabled={!status?.online || rconMutation.isPending || !command.trim()} className="font-mono text-xs uppercase tracking-wider" data-testid="btn-rcon-send">
-            Executar
-          </Button>
-        </form>
-      </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
