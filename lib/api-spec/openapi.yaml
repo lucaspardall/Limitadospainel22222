@@ -3,20 +3,34 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CS2 Server Management Panel API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: servers
+    description: CS2 Server management
+  - name: players
+    description: Player management
+  - name: plugins
+    description: Plugin management
+  - name: logs
+    description: Server logs
+  - name: commands
+    description: RCON commands
+  - name: dashboard
+    description: Dashboard aggregates
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +38,566 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── Auth ───────────────────────────────────────────────────────────────────
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/users:
+    get:
+      operationId: listUsers
+      tags: [auth]
+      summary: List all users (admin only)
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [auth]
+      summary: Create a new user (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /auth/users/{userId}:
+    delete:
+      operationId: deleteUser
+      tags: [auth]
+      summary: Delete a user (admin only)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ─── Servers ─────────────────────────────────────────────────────────────────
+  /servers:
+    get:
+      operationId: listServers
+      tags: [servers]
+      summary: List all registered CS2 servers
+      responses:
+        "200":
+          description: List of servers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Server"
+    post:
+      operationId: createServer
+      tags: [servers]
+      summary: Register a new CS2 server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServerBody"
+      responses:
+        "201":
+          description: Server created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Server"
+
+  /servers/{serverId}:
+    get:
+      operationId: getServer
+      tags: [servers]
+      summary: Get a single server
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Server details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Server"
+    patch:
+      operationId: updateServer
+      tags: [servers]
+      summary: Update server configuration
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateServerBody"
+      responses:
+        "200":
+          description: Server updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Server"
+    delete:
+      operationId: deleteServer
+      tags: [servers]
+      summary: Delete a server
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Server deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /servers/{serverId}/status:
+    get:
+      operationId: getServerStatus
+      tags: [servers]
+      summary: Get live status from external agent
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Server status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerStatus"
+
+  /servers/{serverId}/start:
+    post:
+      operationId: startServer
+      tags: [servers]
+      summary: Start the server via external agent
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Command forwarded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  /servers/{serverId}/stop:
+    post:
+      operationId: stopServer
+      tags: [servers]
+      summary: Stop the server via external agent
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Command forwarded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  /servers/{serverId}/restart:
+    post:
+      operationId: restartServer
+      tags: [servers]
+      summary: Restart the server via external agent
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Command forwarded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  /servers/{serverId}/update:
+    post:
+      operationId: updateServerFiles
+      tags: [servers]
+      summary: Trigger a server update via external agent
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Command forwarded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  /servers/{serverId}/command:
+    post:
+      operationId: sendRconCommand
+      tags: [commands]
+      summary: Send an RCON command via external agent
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RconCommandBody"
+      responses:
+        "200":
+          description: Command result from agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  # ─── Logs ────────────────────────────────────────────────────────────────────
+  /servers/{serverId}/logs:
+    get:
+      operationId: getServerLogs
+      tags: [logs]
+      summary: Get recent logs from external agent (or cached)
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: lines
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LogEntry"
+
+  # ─── Players ─────────────────────────────────────────────────────────────────
+  /servers/{serverId}/players:
+    get:
+      operationId: listPlayers
+      tags: [players]
+      summary: List online players (proxied from agent)
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Online players
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Player"
+
+  /servers/{serverId}/players/{steamId}/kick:
+    post:
+      operationId: kickPlayer
+      tags: [players]
+      summary: Kick a player
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: steamId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayerActionBody"
+      responses:
+        "200":
+          description: Player kicked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  /servers/{serverId}/players/{steamId}/ban:
+    post:
+      operationId: banPlayer
+      tags: [players]
+      summary: Ban a player
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: steamId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayerActionBody"
+      responses:
+        "200":
+          description: Player banned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  /servers/{serverId}/players/{steamId}/mute:
+    post:
+      operationId: mutePlayer
+      tags: [players]
+      summary: Mute a player
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: steamId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlayerActionBody"
+      responses:
+        "200":
+          description: Player muted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  # ─── Plugins ─────────────────────────────────────────────────────────────────
+  /servers/{serverId}/plugins:
+    get:
+      operationId: listPlugins
+      tags: [plugins]
+      summary: List plugins (proxied from agent)
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Plugin list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plugin"
+
+  /servers/{serverId}/plugins/{pluginId}/enable:
+    post:
+      operationId: enablePlugin
+      tags: [plugins]
+      summary: Enable a plugin via agent
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: pluginId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  /servers/{serverId}/plugins/{pluginId}/disable:
+    post:
+      operationId: disablePlugin
+      tags: [plugins]
+      summary: Disable a plugin via agent
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: pluginId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  # ─── Dashboard ───────────────────────────────────────────────────────────────
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get aggregated dashboard stats
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/activity:
+    get:
+      operationId: getDashboardActivity
+      tags: [dashboard]
+      summary: Recent activity timeline
+      responses:
+        "200":
+          description: Activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEntry"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +608,310 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+
+    # ─── Auth ──────────────────────────────────────────────────────────────────
+    LoginBody:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+      required:
+        - user
+        - token
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, user]
+        createdAt:
+          type: string
+      required:
+        - id
+        - username
+        - role
+        - createdAt
+
+    CreateUserBody:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, user]
+      required:
+        - username
+        - password
+        - role
+
+    # ─── Server ────────────────────────────────────────────────────────────────
+    Server:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        ip:
+          type: string
+        port:
+          type: integer
+        agentUrl:
+          type: string
+        agentToken:
+          type: string
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - ip
+        - port
+        - agentUrl
+        - agentToken
+        - createdAt
+        - updatedAt
+
+    CreateServerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        ip:
+          type: string
+        port:
+          type: integer
+        agentUrl:
+          type: string
+        agentToken:
+          type: string
+        description:
+          type: ["string", "null"]
+      required:
+        - name
+        - ip
+        - port
+        - agentUrl
+        - agentToken
+
+    UpdateServerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        ip:
+          type: string
+        port:
+          type: integer
+        agentUrl:
+          type: string
+        agentToken:
+          type: string
+        description:
+          type: ["string", "null"]
+
+    ServerStatus:
+      type: object
+      properties:
+        online:
+          type: boolean
+        playerCount:
+          type: integer
+        maxPlayers:
+          type: integer
+        map:
+          type: ["string", "null"]
+        cpuUsage:
+          type: ["number", "null"]
+        ramUsage:
+          type: ["number", "null"]
+        uptime:
+          type: ["string", "null"]
+        tickrate:
+          type: ["integer", "null"]
+        agentReachable:
+          type: boolean
+      required:
+        - online
+        - playerCount
+        - maxPlayers
+        - agentReachable
+
+    AgentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: ["object", "null"]
+      required:
+        - success
+        - message
+
+    RconCommandBody:
+      type: object
+      properties:
+        command:
+          type: string
+      required:
+        - command
+
+    # ─── Logs ─────────────────────────────────────────────────────────────────
+    LogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+        level:
+          type: string
+          enum: [info, warn, error, debug]
+        message:
+          type: string
+      required:
+        - id
+        - timestamp
+        - level
+        - message
+
+    # ─── Players ──────────────────────────────────────────────────────────────
+    Player:
+      type: object
+      properties:
+        steamId:
+          type: string
+        name:
+          type: string
+        score:
+          type: integer
+        ping:
+          type: integer
+        duration:
+          type: string
+        ip:
+          type: ["string", "null"]
+      required:
+        - steamId
+        - name
+        - score
+        - ping
+        - duration
+
+    PlayerActionBody:
+      type: object
+      properties:
+        reason:
+          type: ["string", "null"]
+        duration:
+          type: ["integer", "null"]
+
+    # ─── Plugins ──────────────────────────────────────────────────────────────
+    Plugin:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        author:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        enabled:
+          type: boolean
+      required:
+        - id
+        - name
+        - version
+        - enabled
+
+    # ─── Dashboard ────────────────────────────────────────────────────────────
+    DashboardSummary:
+      type: object
+      properties:
+        totalServers:
+          type: integer
+        onlineServers:
+          type: integer
+        totalPlayers:
+          type: integer
+        totalUsers:
+          type: integer
+      required:
+        - totalServers
+        - onlineServers
+        - totalPlayers
+        - totalUsers
+
+    ActivityEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [server_start, server_stop, server_restart, player_kick, player_ban, plugin_change, user_login, rcon_command]
+        serverId:
+          type: ["integer", "null"]
+        serverName:
+          type: ["string", "null"]
+        userId:
+          type: ["integer", "null"]
+        userName:
+          type: ["string", "null"]
+        details:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - type
+        - details
+        - createdAt

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "CS2 Server Panel"
+version = "1.0.0"
+id = "artifacts/cs2-panel"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19623
+
+[services.development]
+run = "pnpm --filter @workspace/cs2-panel run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cs2-panel", "run", "build" ]
+publicDir = "artifacts/cs2-panel/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19623"
+BASE_PATH = "/"
