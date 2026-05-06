@@ -18,6 +18,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ShieldAlert, Trash2, UserPlus, Users } from "lucide-react";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 const userSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
