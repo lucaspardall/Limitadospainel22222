@@ -758,7 +758,7 @@ const QUICK_COMMANDS = [
 
 function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
   const [command, setCommand] = useState("");
-  const [history, setHistory] = useState<{ type: "req" | "res"; text: string }[]>([]);
+  const [history, setHistory] = useState<{ type: "req" | "res" | "err"; text: string }[]>([]);
   const [showQuick, setShowQuick] = useState(true);
   const rconMutation = useSendRconCommand();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -768,24 +768,30 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
   }, [history]);
 
   const execCommand = (cmd: string) => {
-    if (!status?.online) return;
+    if (!cmd.trim()) return;
     setHistory(h => [...h, { type: "req", text: `> ${cmd}` }]);
     rconMutation.mutate({ serverId, data: { command: cmd } }, {
-      onSuccess: (res: any) => setHistory(h => [...h, { type: "res", text: res.data?.response ?? "Comando executado." }]),
-      onError: (err: any) => setHistory(h => [...h, { type: "res", text: `Erro: ${err.message ?? "Falha ao executar"}` }]),
+      onSuccess: (res: any) => {
+        const text = res?.data?.response ?? res?.response ?? "OK — comando executado.";
+        setHistory(h => [...h, { type: "res", text }]);
+      },
+      onError: (err: any) => {
+        const text = err?.message ?? "Falha ao executar comando.";
+        setHistory(h => [...h, { type: "err", text: `[ERRO] ${text}` }]);
+      },
     });
   };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!command.trim() || !status?.online) return;
+    if (!command.trim() || rconMutation.isPending) return;
     const cmd = command.trim();
     setCommand("");
     execCommand(cmd);
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Quick Commands Panel */}
       <Card className="bg-card border-border overflow-hidden">
         <button
@@ -797,35 +803,35 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
             <Terminal className="w-3.5 h-3.5" /> Comandos Rápidos
           </span>
           <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
-            {showQuick ? "▲ ocultar" : "▼ mostrar"}
+            {showQuick ? "▲ recolher" : "▼ expandir"}
           </span>
         </button>
 
         {showQuick && (
-          <div className="p-4 space-y-4">
+          <div className="p-4 space-y-5">
             {QUICK_COMMANDS.map(({ category, cmds }) => (
               <div key={category}>
-                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2 pb-1 border-b border-border/30">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2.5 pb-1 border-b border-border/30">
                   {category}
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5">
                   {cmds.map(({ label, cmd }) => (
                     <button
                       key={cmd}
                       onClick={() => execCommand(cmd)}
-                      disabled={!status?.online || rconMutation.isPending}
+                      disabled={rconMutation.isPending}
                       title={cmd}
                       data-testid={`btn-qcmd-${cmd.replace(/\s+/g, "-")}`}
                       className={cn(
-                        "group relative px-3 py-1.5 rounded border font-mono text-xs transition-all duration-100",
-                        "border-border/60 bg-muted/30 text-foreground",
-                        "hover:border-primary/60 hover:bg-primary/10 hover:text-primary",
-                        "disabled:opacity-40 disabled:cursor-not-allowed",
-                        "active:scale-95"
+                        "group text-left px-3 py-2 rounded border font-mono text-xs transition-all duration-100",
+                        "border-border bg-muted/20 text-foreground",
+                        "hover:border-primary hover:bg-primary/10 hover:text-primary",
+                        "disabled:opacity-50 disabled:cursor-not-allowed",
+                        "active:scale-[0.97]"
                       )}
                     >
-                      <span className="block">{label}</span>
-                      <span className="block text-[9px] text-muted-foreground group-hover:text-primary/70 truncate max-w-[120px]">{cmd}</span>
+                      <span className="block font-medium leading-tight">{label}</span>
+                      <span className="block text-[9px] text-muted-foreground group-hover:text-primary/60 mt-0.5 truncate">{cmd}</span>
                     </button>
                   ))}
                 </div>
@@ -836,47 +842,58 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
       </Card>
 
       {/* Terminal */}
-      <Card className="bg-[#0a0a0c] border-border overflow-hidden flex flex-col h-[420px]">
-        <CardHeader className="py-3 px-4 border-b border-border/50 bg-black/40 flex-shrink-0">
-          <CardTitle className="font-mono text-xs uppercase tracking-widest flex items-center text-primary">
-            <Terminal className="w-3 h-3 mr-2" /> RCON Terminal ·{" "}
+      <Card className="bg-[#0a0a0c] border-border overflow-hidden flex flex-col h-[380px]">
+        <CardHeader className="py-2.5 px-4 border-b border-border/50 bg-black/40 flex-shrink-0">
+          <CardTitle className="font-mono text-xs uppercase tracking-widest flex items-center gap-2 text-primary">
+            <Terminal className="w-3 h-3" /> RCON
             {status?.online
-              ? <span className="text-primary ml-1.5">ONLINE</span>
-              : <span className="text-muted-foreground ml-1.5">OFFLINE</span>}
+              ? <span className="text-primary">· ONLINE</span>
+              : <span className="text-muted-foreground">· OFFLINE</span>}
+            {rconMutation.isPending && <span className="text-yellow-500 animate-pulse">· enviando...</span>}
           </CardTitle>
         </CardHeader>
         <ScrollArea className="flex-1" ref={scrollRef}>
-          <div className="p-4 font-mono text-xs leading-relaxed space-y-1">
-            <div className="text-muted-foreground mb-3">
-              CS2 Remote Console — servidor {status?.online ? "ONLINE" : "OFFLINE"}.
+          <div className="p-4 font-mono text-xs leading-relaxed space-y-0.5">
+            <div className="text-muted-foreground/60 mb-3 text-[10px]">
+              Sessão iniciada — {new Date().toLocaleTimeString("pt-BR")}
             </div>
             {history.map((entry, i) => (
-              <div key={i} className={cn("whitespace-pre-wrap", entry.type === "req" ? "text-primary mt-2" : "text-foreground/80")}>
+              <div
+                key={i}
+                className={cn(
+                  "whitespace-pre-wrap py-0.5",
+                  entry.type === "req" ? "text-primary font-medium mt-1.5" :
+                  entry.type === "err" ? "text-destructive" :
+                  "text-foreground/75"
+                )}
+              >
                 {entry.text}
               </div>
             ))}
             {rconMutation.isPending && (
-              <div className="text-muted-foreground animate-pulse">Aguardando resposta...</div>
+              <div className="text-yellow-500/70 animate-pulse text-[10px]">aguardando resposta...</div>
             )}
           </div>
         </ScrollArea>
-        <div className="p-3 border-t border-border/50 bg-black/40 flex-shrink-0">
+        <div className="p-2.5 border-t border-border/50 bg-black/40 flex-shrink-0">
           <form onSubmit={onSubmit} className="flex gap-2">
             <Input
               value={command}
               onChange={e => setCommand(e.target.value)}
-              disabled={!status?.online || rconMutation.isPending}
-              placeholder={status?.online ? "Digite um comando RCON..." : "Servidor offline"}
-              className="bg-transparent border-border/50 font-mono text-xs focus-visible:ring-primary/30"
+              disabled={rconMutation.isPending}
+              placeholder="Digite um comando RCON e pressione Enter..."
+              className="bg-transparent border-border/50 font-mono text-xs focus-visible:ring-primary/30 h-8"
               data-testid="input-rcon"
+              autoComplete="off"
             />
             <Button
               type="submit"
-              disabled={!status?.online || rconMutation.isPending || !command.trim()}
-              className="font-mono text-xs uppercase tracking-wider"
+              disabled={rconMutation.isPending || !command.trim()}
+              size="sm"
+              className="font-mono text-xs uppercase tracking-wider h-8 px-4 shrink-0"
               data-testid="btn-rcon-send"
             >
-              Executar
+              Enviar
             </Button>
           </form>
         </div>
