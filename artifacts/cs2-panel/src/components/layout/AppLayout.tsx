@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { Activity, HardDrive, LayoutDashboard, LogOut, Settings, ShieldAlert, Users } from "lucide-react";
+import { HardDrive, LayoutDashboard, LogOut, Settings, ShieldAlert, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -9,10 +9,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
 
   const navItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/servers", label: "Servers", icon: HardDrive },
-    { href: "/users", label: "Panel Users", icon: Users, adminOnly: true },
-    { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/dashboard", label: "Dashboard",        icon: LayoutDashboard },
+    { href: "/servers",   label: "Servidores",        icon: HardDrive },
+    { href: "/users",     label: "Usuários do Painel", icon: Users, adminOnly: true },
+    { href: "/settings",  label: "Configurações",     icon: Settings },
   ];
 
   return (
@@ -22,7 +22,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="h-16 flex items-center px-6 border-b border-border">
           <div className="flex items-center gap-2 text-primary">
             <ShieldAlert className="w-6 h-6" />
-            <span className="font-bold tracking-wider font-mono">OPCENTER</span>
+            <div className="flex flex-col leading-tight">
+              <span className="font-bold tracking-wider font-mono text-sm">LIMITADOS</span>
+              <span className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest">Painel CS2</span>
+            </div>
           </div>
         </div>
 
@@ -39,9 +42,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
-                  data-testid={`nav-${item.label.toLowerCase()}`}
+                  data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                 >
-                  <item.icon className="w-4 h-4" />
+                  <item.icon className="w-4 h-4 shrink-0" />
                   {item.label}
                 </div>
               </Link>
@@ -53,13 +56,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
               <span className="text-sm font-medium text-foreground">{user?.username}</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">{user?.role}</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">
+                {user?.role === "admin" ? "Admin" : "Usuário"}
+              </span>
             </div>
             <button
               onClick={logout}
               className="p-2 text-muted-foreground hover:text-destructive transition-colors rounded-md hover:bg-destructive/10"
               data-testid="btn-logout"
-              title="Logout"
+              title="Sair"
             >
               <LogOut className="w-4 h-4" />
             </button>
