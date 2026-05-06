@@ -12,7 +12,7 @@ A complete web panel for managing Counter-Strike 2 game servers, with a secure i
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL`, `SESSION_SECRET` (JWT secret)
 
-**Default login:** `admin` / `admin123` · `operator` / `admin123`
+**Default login:** `admin` / `admin` · `operator` / `admin`
 
 ## Stack
 
