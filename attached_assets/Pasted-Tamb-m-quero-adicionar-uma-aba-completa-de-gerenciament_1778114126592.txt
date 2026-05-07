@@ -1,0 +1,135 @@
+Também quero adicionar uma aba completa de gerenciamento de demos/CSTV no painel.
+
+Objetivo:
+Controlar gravações diretamente pelo painel sem precisar usar console.
+
+Motivo:
+A VPS possui pouco armazenamento, então precisamos conseguir administrar demos facilmente.
+
+Quero uma aba chamada:
+“Demos” ou “CSTV / Demos”
+
+Funções desejadas:
+
+Iniciar gravação manual
+Pausar gravação
+Continuar gravação
+Parar/cancelar gravação
+Auto record opcional
+Mostrar status atual da gravação
+Mostrar tamanho do arquivo em tempo real
+Mostrar tempo de gravação
+
+Também quero uma lista de demos gravadas:
+
+Nome
+Data
+Tamanho
+Mapa
+Duração
+
+Ações:
+
+Download demo
+Excluir demo
+Renomear demo
+Abrir pasta da demo
+Buscar demos
+Ordenar por tamanho/data
+
+Também quero:
+
+Limite automático de armazenamento
+Auto delete opcional das demos mais antigas
+Aviso quando armazenamento estiver acabando
+Configurar pasta das demos
+
+Integração com CSTV/GOTV:
+
+Ativar/desativar CSTV
+Configurar delay
+Configurar auto record
+Status do CSTV online/offline
+
+Quero que o painel consiga executar comandos automaticamente como:
+tv_enable 1
+tv_autorecord 1
+
+E também iniciar gravações manuais com:
+record nome_da_demo
+
+Também quero uma nova aba integrada chamada:
+“Live Match”
+ou
+“Live Dashboard”
+
+Essa aba NÃO precisa transmitir vídeo real da partida.
+
+Quero algo estilo HLTV/Faceit mostrando informações da partida em tempo real diretamente no painel.
+
+Objetivo:
+Conseguir acompanhar a partida pelo navegador sem entrar no servidor.
+
+Quero mostrar:
+
+Placar ao vivo
+Time CT/TR
+Players vivos/mortos
+Kills
+Deaths
+MVPs
+Dinheiro/economia
+Armas principais
+Round atual
+Mapa atual
+Tempo do round
+Status da bomba
+Timeout
+Warmup
+Jogadores conectados
+Ping
+
+Também quero:
+
+Radar simples do mapa (futuramente)
+Feed de kills
+Histórico de rounds
+Status do match (Warmup / Live / Finished)
+
+A interface deve parecer um:
+“Painel de espectador profissional”.
+
+Importante:
+
+Não quero stream de vídeo real.
+Quero painel leve baseado em dados/logs do servidor.
+Precisa consumir pouca VPS.
+Atualização em tempo real via websocket/socket.io.
+
+Possíveis fontes:
+
+CSTV
+logs do servidor
+Game State Integration
+plugins SourceMod
+
+Também quero:
+
+Botão “Watch Live” para conectar automaticamente no CSTV/GOTV
+Logs da partida em tempo real
+Persistência do estado após restart do painel
+
+Quero interface moderna:
+
+Cards
+Scoreboard profissional
+Indicador LIVE
+Atualização em tempo real
+Visual estilo HLTV/Faceit
+
+IMPORTANTE:
+
+O sistema precisa detectar demos automaticamente na pasta do servidor.
+Precisa funcionar após restart do painel.
+Não quero precisar acessar FTP pra administrar demos.
+Tudo deve funcionar diretamente pelo painel web.

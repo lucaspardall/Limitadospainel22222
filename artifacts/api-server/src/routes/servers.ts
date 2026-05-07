@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, serversTable, activityTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, serversTable, activityTable, gameModesTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { CreateServerBody, UpdateServerBody } from "@workspace/api-zod";
 import { authMiddleware } from "./auth";
 
@@ -309,6 +309,96 @@ router.post("/servers/:serverId/plugins/:pluginId/disable", authMiddleware, asyn
   const result = await forwardToAgent(s.agentUrl, s.agentToken, `/server/plugins/${req.params.pluginId}/disable`, "POST");
   await logActivity("plugin_change", `Disabled plugin ${req.params.pluginId}`, s.id, s.name, req.user?.userId, req.user?.username);
   return res.json(result.success ? result : { success: true, message: "Plugin disable forwarded (agent not reachable, cached)" });
+});
+
+// ─── Game Modes ───────────────────────────────────────────────────────────────
+
+function parseMode(m: typeof gameModesTable.$inferSelect) {
+  return {
+    ...m,
+    plugins: JSON.parse(m.plugins ?? "[]"),
+    configs: JSON.parse(m.configs ?? "[]"),
+    cvars: JSON.parse(m.cvars ?? "{}"),
+  };
+}
+
+// GET /api/servers/:serverId/modes
+router.get("/servers/:serverId/modes", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+  const modes = await db.select().from(gameModesTable).where(eq(gameModesTable.serverId, id));
+  return res.json(modes.map(parseMode));
+});
+
+// POST /api/servers/:serverId/modes
+router.post("/servers/:serverId/modes", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+  const { name, displayName, description, gameType, gameMode, plugins, configs, cvars, mapgroup } = req.body;
+  if (!name || !displayName) return res.status(400).json({ error: "name and displayName are required" });
+  const [mode] = await db.insert(gameModesTable).values({
+    serverId: id,
+    name,
+    displayName,
+    description: description ?? null,
+    gameType: gameType ?? 0,
+    gameMode: gameMode ?? 1,
+    plugins: JSON.stringify(Array.isArray(plugins) ? plugins : []),
+    configs: JSON.stringify(Array.isArray(configs) ? configs : []),
+    cvars: JSON.stringify(typeof cvars === "object" && cvars !== null && !Array.isArray(cvars) ? cvars : {}),
+    mapgroup: mapgroup ?? "mg_active",
+  }).returning();
+  return res.status(201).json(parseMode(mode));
+});
+
+// DELETE /api/servers/:serverId/modes/:modeId
+router.delete("/servers/:serverId/modes/:modeId", authMiddleware, async (req: any, res: any) => {
+  const modeId = parseInt(req.params.modeId, 10);
+  if (isNaN(modeId)) return res.status(400).json({ error: "Invalid modeId" });
+  await db.delete(gameModesTable).where(eq(gameModesTable.id, modeId));
+  return res.json({ success: true });
+});
+
+// POST /api/servers/:serverId/modes/:modeId/activate
+router.post("/servers/:serverId/modes/:modeId/activate", authMiddleware, async (req: any, res: any) => {
+  const serverId = parseInt(req.params.serverId, 10);
+  const modeId   = parseInt(req.params.modeId, 10);
+  if (isNaN(serverId) || isNaN(modeId)) return res.status(400).json({ error: "Invalid id" });
+
+  const [server] = await db.select().from(serversTable).where(eq(serversTable.id, serverId)).limit(1);
+  if (!server) return res.status(404).json({ error: "Server not found" });
+
+  const [mode] = await db.select().from(gameModesTable).where(
+    and(eq(gameModesTable.id, modeId), eq(gameModesTable.serverId, serverId))
+  ).limit(1);
+  if (!mode) return res.status(404).json({ error: "Mode not found" });
+
+  // Deactivate all modes for this server, then activate chosen one
+  await db.update(gameModesTable).set({ isActive: false }).where(eq(gameModesTable.serverId, serverId));
+  await db.update(gameModesTable).set({ isActive: true }).where(eq(gameModesTable.id, modeId));
+
+  // Forward to agent
+  const modePayload = {
+    name:      mode.name,
+    gameType:  mode.gameType,
+    gameMode:  mode.gameMode,
+    plugins:   JSON.parse(mode.plugins ?? "[]"),
+    configs:   JSON.parse(mode.configs ?? "[]"),
+    cvars:     JSON.parse(mode.cvars   ?? "{}"),
+    mapgroup:  mode.mapgroup,
+    restart:   true,
+  };
+
+  const agentResult = await forwardToAgent(server.agentUrl, server.agentToken, "/server/mode", "POST", modePayload);
+
+  await logActivity(
+    "plugin_change",
+    `Modo alterado para ${mode.displayName}`,
+    server.id, server.name,
+    req.user?.userId, req.user?.username,
+  );
+
+  return res.json({ success: true, mode: parseMode(mode), agentResult });
 });
 
 export default router;

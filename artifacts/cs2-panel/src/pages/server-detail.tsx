@@ -38,6 +38,7 @@ import {
   Activity, Cpu, MemoryStick, Clock, Users, Map, ShieldAlert,
   ShieldOff, Ban, MessageSquareOff, UserPlus, Trash2, Search
 } from "lucide-react";
+import { ModesTab } from "@/components/ModesTab";
 import { cn } from "@/lib/utils";
 
 const TRIGGER_CLASS = "rounded-none h-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary font-mono text-xs uppercase tracking-widest px-5 flex-shrink-0";
@@ -152,6 +153,7 @@ export default function ServerDetail() {
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="bg-card border border-border w-full justify-start rounded-none h-12 p-0 overflow-x-auto flex">
           <TabsTrigger value="overview" className={TRIGGER_CLASS}>Overview</TabsTrigger>
+          <TabsTrigger value="modos" className={TRIGGER_CLASS}>Modos</TabsTrigger>
           <TabsTrigger value="players" className={TRIGGER_CLASS}>Players</TabsTrigger>
           <TabsTrigger value="admins" className={TRIGGER_CLASS}>Admins</TabsTrigger>
           <TabsTrigger value="maps" className={TRIGGER_CLASS}>Maps</TabsTrigger>
@@ -163,6 +165,9 @@ export default function ServerDetail() {
         <div className="mt-6">
           <TabsContent value="overview">
             <OverviewTab serverId={serverId} status={status} isLoading={statusLoading} />
+          </TabsContent>
+          <TabsContent value="modos">
+            <ModesTab serverId={serverId} />
           </TabsContent>
           <TabsContent value="players">
             <PlayersTab serverId={serverId} status={status} />

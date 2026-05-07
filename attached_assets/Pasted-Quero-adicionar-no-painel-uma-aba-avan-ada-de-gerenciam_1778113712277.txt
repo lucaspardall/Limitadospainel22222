@@ -1,0 +1,164 @@
+Quero adicionar no painel uma aba avançada de gerenciamento de plugins/modos de jogo para o servidor CS2.
+
+Atualmente, para ativar ou desativar plugins, é necessário mover manualmente os arquivos entre pastas usando FTP/Explorer. Quero automatizar isso diretamente pelo painel.
+
+IMPORTANTE — MUDANÇA DE ARQUITETURA:
+O sistema atual do painel foi criado pensando em múltiplos servidores separados (Competitive, Retake, Deathmatch etc), mas isso não faz sentido para nosso uso atual.
+
+Nós NÃO vamos usar múltiplas instâncias.
+
+Queremos:
+1 único servidor CS2
++
+troca dinâmica de modos de jogo.
+
+Então o painel deve ser refatorado para funcionar como:
+“1 servidor principal com múltiplos modos”.
+
+EXEMPLO REAL:
+
+Quero jogar Competitive → clico em Competitive
+Quero jogar Retake → clico em Retake
+Quero jogar Deathmatch → clico em Deathmatch
+
+O painel:
+
+altera plugins
+altera configs
+altera gamemode/gametype
+reinicia automaticamente
+
+Tudo usando a MESMA instância do servidor.
+
+NÃO quero:
+
+vários servidores separados
+múltiplas portas
+múltiplas instâncias
+duplicação de arquivos
+um card pra cada modo como se fosse outro servidor
+
+A tela atual mostra:
+
+Main Competitive
+Retakes Practice
+DeathMatch DM
+
+Mas quero mudar isso para algo assim:
+
+==================================
+Servidor Principal
+ONLINE
+
+Modo Atual:
+Competitive
+
+OBJETIVO:
+Criar um sistema de “Game Modes” inteligente.
+
+Funcionamento:
+Quando eu clicar em um modo:
+
+O sistema move automaticamente os plugins necessários da pasta plugins_off para plugins
+Remove/desativa plugins do modo anterior
+Aplica configs do modo
+Altera game_type/game_mode automaticamente
+Reinicia automaticamente o servidor
+Atualiza status no painel
+Salva o modo ativo atual
+
+ESTRUTURA DOS PLUGINS:
+Existe:
+addons/plugins/
+addons/plugins_off/
+
+Plugins ativos:
+addons/plugins/
+
+Plugins desativados:
+addons/plugins_off/
+
+Exemplo:
+Se clicar em “Retake”:
+
+retake.smx vai para addons/plugins/
+plugins de DM/PUG vão para addons/plugins_off/
+configs do Retake são aplicadas
+servidor reinicia automaticamente
+
+Também quero uma estrutura moderna baseada em presets/perfis.
+
+Cada modo deve possuir:
+
+plugins
+configs
+mapcycle
+gamemode
+gametype
+cvars
+execs automáticos
+
+Estrutura:
+modes/competitive/
+modes/deathmatch/
+modes/retake/
+
+Cada pasta contém:
+
+plugins necessários
+configs
+autoexecs
+mode.json
+
+Exemplo do mode.json:
+{
+"name": "Deathmatch",
+"game_type": 1,
+"game_mode": 2,
+"plugins": [
+"deathmatch.smx",
+"weaponmenu.smx"
+],
+"configs": [
+"deathmatch.cfg"
+],
+"mapgroup": "mg_active"
+}
+
+Quero arquitetura limpa e expansível:
+
+Cada modo deve ser independente
+Backend modular
+Fácil adicionar novos modos futuramente
+Compatível com futura expansão para múltiplos servidores
+
+Backend:
+
+Node.js
+API REST
+Funções como:
+activateMode(modeName)
+deactivateCurrentMode()
+validatePlugins()
+applyConfigs()
+restartServer()
+
+Frontend:
+
+Interface moderna estilo painel profissional de gameserver
+Cards/botões dos modos
+Status em tempo real
+Loading durante restart
+Indicador visual do modo ativo
+Logs da troca de modo
+Botão de restart rápido
+
+IMPORTANTE:
+
+O sistema precisa evitar conflito entre plugins.
+Validar se o plugin existe antes de mover.
+Impedir troca dupla simultânea.
+Persistir estado após reiniciar o painel.
+Código organizado e profissional.
+Não quero gambiarra.
+Pode criar estrutura completa de pastas e explicar toda lógica do sistema.
