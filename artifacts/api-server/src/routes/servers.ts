@@ -311,6 +311,168 @@ router.post("/servers/:serverId/plugins/:pluginId/disable", authMiddleware, asyn
   return res.json(result.success ? result : { success: true, message: "Plugin disable forwarded (agent not reachable, cached)" });
 });
 
+// ─── CSTV / Demos ────────────────────────────────────────────────────────────
+
+async function streamFromAgent(
+  agentUrl: string,
+  token: string,
+  path: string,
+  timeoutMs = 30000
+): Promise<Response | null> {
+  const url = agentUrl.replace(/\/$/, "") + path;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    return res;
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+// GET /api/servers/:serverId/demos
+router.get("/servers/:serverId/demos", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/demos", "GET");
+  if (!result.success) return res.json([]);
+  const d = result.data as any;
+  return res.json(Array.isArray(d) ? d : d.demos ?? []);
+});
+
+// POST /api/servers/:serverId/demos/record
+router.post("/servers/:serverId/demos/record", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: "name is required" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/demos/record", "POST", { name });
+  await logActivity("rcon_command", `CSTV: iniciou gravação ${name}`, s.id, s.name, req.user?.userId, req.user?.username);
+  return res.json(result);
+});
+
+// POST /api/servers/:serverId/demos/stop
+router.post("/servers/:serverId/demos/stop", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/demos/stop", "POST");
+  await logActivity("rcon_command", "CSTV: parou gravação", s.id, s.name, req.user?.userId, req.user?.username);
+  return res.json(result);
+});
+
+// POST /api/servers/:serverId/demos/pause
+router.post("/servers/:serverId/demos/pause", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  return res.json(await forwardToAgent(s.agentUrl, s.agentToken, "/server/demos/pause", "POST"));
+});
+
+// POST /api/servers/:serverId/demos/resume
+router.post("/servers/:serverId/demos/resume", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  return res.json(await forwardToAgent(s.agentUrl, s.agentToken, "/server/demos/resume", "POST"));
+});
+
+// GET /api/servers/:serverId/demos/:name/download
+router.get("/servers/:serverId/demos/:name/download", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const name = req.params.name;
+  const agentRes = await streamFromAgent(s.agentUrl, s.agentToken, `/server/demos/${encodeURIComponent(name)}`);
+  if (!agentRes || !agentRes.ok) return res.status(404).json({ error: "Demo not found on agent" });
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename="${name.endsWith(".dem") ? name : name + ".dem"}"`);
+  const ct = agentRes.headers.get("Content-Length");
+  if (ct) res.setHeader("Content-Length", ct);
+  if (agentRes.body) {
+    const reader = agentRes.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(Buffer.from(value));
+      }
+    } finally {
+      res.end();
+    }
+  } else {
+    res.end();
+  }
+});
+
+// DELETE /api/servers/:serverId/demos/:name
+router.delete("/servers/:serverId/demos/:name", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, `/server/demos/${encodeURIComponent(req.params.name)}`, "DELETE");
+  return res.json(result);
+});
+
+// POST /api/servers/:serverId/demos/:name/rename
+router.post("/servers/:serverId/demos/:name/rename", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const { newName } = req.body;
+  if (!newName) return res.status(400).json({ error: "newName is required" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, `/server/demos/${encodeURIComponent(req.params.name)}/rename`, "POST", { newName });
+  return res.json(result);
+});
+
+// GET /api/servers/:serverId/cstv/status
+router.get("/servers/:serverId/cstv/status", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/cstv/status", "GET");
+  if (!result.success) {
+    return res.json({
+      tvEnabled: false, tvRecording: false, tvDemoName: null,
+      tvDelay: 30, tvAutorecord: false, tvClients: 0,
+      recordingDuration: 0, recordingSize: 0, agentReachable: false,
+    });
+  }
+  return res.json({ ...(result.data as object), agentReachable: true });
+});
+
+// GET /api/servers/:serverId/cstv/config
+router.get("/servers/:serverId/cstv/config", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/cstv/config", "GET");
+  if (!result.success) {
+    return res.json({
+      tvEnable: true, tvDelay: 30, tvAutorecord: true,
+      demoFolder: "/home/steam/cs2/game/csgo",
+      storageLimit: 10240, autoDeleteOld: false, autoDeleteAfterDays: 30,
+    });
+  }
+  return res.json(result.data);
+});
+
+// POST /api/servers/:serverId/cstv/config
+router.post("/servers/:serverId/cstv/config", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/cstv/config", "POST", req.body);
+  return res.json(result);
+});
+
 // ─── Game Modes ───────────────────────────────────────────────────────────────
 
 function parseMode(m: typeof gameModesTable.$inferSelect) {

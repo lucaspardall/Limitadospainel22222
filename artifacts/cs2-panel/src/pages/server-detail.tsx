@@ -39,6 +39,7 @@ import {
   ShieldOff, Ban, MessageSquareOff, UserPlus, Trash2, Search
 } from "lucide-react";
 import { ModesTab } from "@/components/ModesTab";
+import { CSTVTab } from "@/components/CSTVTab";
 import { cn } from "@/lib/utils";
 
 const TRIGGER_CLASS = "rounded-none h-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary font-mono text-xs uppercase tracking-widest px-5 flex-shrink-0";
@@ -158,6 +159,7 @@ export default function ServerDetail() {
           <TabsTrigger value="admins" className={TRIGGER_CLASS}>Admins</TabsTrigger>
           <TabsTrigger value="maps" className={TRIGGER_CLASS}>Maps</TabsTrigger>
           <TabsTrigger value="plugins" className={TRIGGER_CLASS}>Plugins</TabsTrigger>
+          <TabsTrigger value="cstv" className={TRIGGER_CLASS}>CSTV</TabsTrigger>
           <TabsTrigger value="logs" className={TRIGGER_CLASS}>Logs</TabsTrigger>
           <TabsTrigger value="console" className={TRIGGER_CLASS}>Console</TabsTrigger>
         </TabsList>
@@ -180,6 +182,9 @@ export default function ServerDetail() {
           </TabsContent>
           <TabsContent value="plugins">
             <PluginsTab serverId={serverId} status={status} />
+          </TabsContent>
+          <TabsContent value="cstv">
+            <CSTVTab serverId={serverId} />
           </TabsContent>
           <TabsContent value="logs">
             <LogsTab serverId={serverId} />
