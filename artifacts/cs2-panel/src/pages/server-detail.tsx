@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useRoute } from "wouter";
 import { 
   useGetServer, 
@@ -16,9 +16,13 @@ import {
   useListPlugins,
   useEnablePlugin,
   useDisablePlugin,
+  useListAdmins,
+  useUpsertAdmin,
+  useDeleteAdmin,
   getGetServerStatusQueryKey,
   getListPlayersQueryKey,
-  getListPluginsQueryKey
+  getListPluginsQueryKey,
+  getListAdminsQueryKey
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -76,7 +80,7 @@ export default function ServerDetail() {
   };
 
   if (serverLoading) return <div className="p-6"><Skeleton className="h-64 w-full bg-card" /></div>;
-  if (!server) return <div className="p-6 text-destructive font-mono">Servidor não encontrado</div>;
+  if (!server) return <div className="p-6 text-destructive font-mono">Servidor nÃ£o encontrado</div>;
 
   const isOnline = status?.online;
   const isReachable = status?.agentReachable;
@@ -98,7 +102,7 @@ export default function ServerDetail() {
             {status && isReachable && (
               <span className="text-xs font-mono text-muted-foreground">
                 {status.playerCount}/{status.maxPlayers} jogadores
-                {status.map ? ` · ${status.map}` : ""}
+                {status.map ? ` Â· ${status.map}` : ""}
               </span>
             )}
           </div>
@@ -198,16 +202,16 @@ export default function ServerDetail() {
   );
 }
 
-// ─── Overview ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function OverviewTab({ serverId: _serverId, status, isLoading }: any) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
       {[
-        { icon: Users, label: "Players", value: isLoading ? "—" : `${status?.playerCount ?? 0}/${status?.maxPlayers ?? 0}` },
-        { icon: Map,   label: "Mapa",    value: isLoading ? "—" : (status?.map ?? "—"), primary: true },
-        { icon: Cpu,   label: "CPU",     value: isLoading ? "—" : `${status?.cpuUsage?.toFixed(1) ?? 0}%` },
-        { icon: MemoryStick, label: "RAM", value: isLoading ? "—" : `${status?.ramUsage ?? 0} MB` },
-        { icon: Clock, label: "Uptime",  value: isLoading ? "—" : (status?.uptime ?? "0s") },
+        { icon: Users, label: "Players", value: isLoading ? "â€”" : `${status?.playerCount ?? 0}/${status?.maxPlayers ?? 0}` },
+        { icon: Map,   label: "Mapa",    value: isLoading ? "â€”" : (status?.map ?? "â€”"), primary: true },
+        { icon: Cpu,   label: "CPU",     value: isLoading ? "â€”" : `${status?.cpuUsage?.toFixed(1) ?? 0}%` },
+        { icon: MemoryStick, label: "RAM", value: isLoading ? "â€”" : `${status?.ramUsage ?? 0} MB` },
+        { icon: Clock, label: "Uptime",  value: isLoading ? "â€”" : (status?.uptime ?? "0s") },
       ].map(({ icon: Icon, label, value, primary }) => (
         <Card key={label} className="bg-card border-border">
           <CardContent className="pt-5 pb-4">
@@ -222,7 +226,7 @@ function OverviewTab({ serverId: _serverId, status, isLoading }: any) {
   );
 }
 
-// ─── Players ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Players â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PlayersTab({ serverId, status }: { serverId: number; status: any }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -258,7 +262,7 @@ function PlayersTab({ serverId, status }: { serverId: number; status: any }) {
             <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Score</TableHead>
             <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Ping</TableHead>
             <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Tempo</TableHead>
-            <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Ações</TableHead>
+            <TableHead className="font-mono text-xs uppercase tracking-wider text-right">AÃ§Ãµes</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -294,58 +298,56 @@ function PlayersTab({ serverId, status }: { serverId: number; status: any }) {
   );
 }
 
-// ─── Admins ──────────────────────────────────────────────────────────────────
-const SM_FLAGS = [
-  { value: "b", label: "b — Reserva de slot" },
-  { value: "c", label: "c — Voto de kick" },
-  { value: "d", label: "d — Voto de ban" },
-  { value: "e", label: "e — Alterar mapa" },
-  { value: "f", label: "f — Alterar config" },
-  { value: "g", label: "g — Modo cheats" },
-  { value: "k", label: "k — Kick de jogador" },
-  { value: "t", label: "t — Ban por tempo" },
-  { value: "z", label: "z — Root (tudo)" },
+// â”€â”€â”€ Admins â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const CSS_FLAGS = [
+  { value: "@css/root", label: "@css/root - acesso total" },
+  { value: "@css/admin", label: "@css/admin - admin geral" },
+  { value: "@css/ban", label: "@css/ban - banimentos" },
+  { value: "@css/kick", label: "@css/kick - expulsar jogadores" },
+  { value: "@css/changemap", label: "@css/changemap - trocar mapa" },
+  { value: "@css/cvar", label: "@css/cvar - alterar cvars" },
 ];
 
 type AdminEntry = { steamId: string; name: string; flags: string; immunity: number };
 
 function AdminsTab({ serverId, status }: { serverId: number; status: any }) {
   const { toast } = useToast();
-  const rconMutation = useSendRconCommand();
+  const queryClient = useQueryClient();
+  const { data: admins = [], isLoading } = useListAdmins(serverId, {
+    query: { enabled: !!serverId },
+  });
+  const upsertAdminMutation = useUpsertAdmin();
+  const deleteAdminMutation = useDeleteAdmin();
 
-  const [admins, setAdmins] = useState<AdminEntry[]>([
-    { steamId: "STEAM_0:0:000000001", name: "Owner", flags: "z", immunity: 100 },
-  ]);
   const [steamId, setSteamId] = useState("");
   const [adminName, setAdminName] = useState("");
-  const [flags, setFlags] = useState("k");
+  const [flags, setFlags] = useState("@css/root");
   const [immunity, setImmunity] = useState("50");
-
-  const sendRcon = (command: string, desc: string) => {
-    if (!status?.online) {
-      toast({ title: "Servidor offline", description: "Servidor precisa estar online para enviar RCON.", variant: "destructive" });
-      return;
-    }
-    rconMutation.mutate({ serverId, data: { command } }, {
-      onSuccess: () => toast({ title: "RCON enviado", description: desc }),
-      onError: () => toast({ title: "Erro RCON", description: "Falha ao enviar comando.", variant: "destructive" }),
-    });
-  };
 
   const addAdmin = () => {
     if (!steamId.trim()) {
-      toast({ title: "SteamID obrigatório", variant: "destructive" });
+      toast({ title: "SteamID obrigatÃ³rio", variant: "destructive" });
       return;
     }
     const entry: AdminEntry = { steamId: steamId.trim(), name: adminName.trim() || steamId.trim(), flags, immunity: parseInt(immunity) || 50 };
-    setAdmins(prev => [...prev, entry]);
-    sendRcon(`sm_addadmin "${entry.name}" "${entry.steamId}" "${entry.flags}" ${entry.immunity}`, `Admin ${entry.name} adicionado.`);
-    setSteamId(""); setAdminName(""); setFlags("k"); setImmunity("50");
+    upsertAdminMutation.mutate({ serverId, data: entry }, {
+      onSuccess: () => {
+        toast({ title: "Admin salvo", description: `${entry.name} foi gravado no admins.json.` });
+        queryClient.invalidateQueries({ queryKey: getListAdminsQueryKey(serverId) });
+        setSteamId(""); setAdminName(""); setFlags("@css/root"); setImmunity("50");
+      },
+      onError: (err: any) => toast({ title: "Erro ao salvar admin", description: err.message || "Falha ao atualizar admins.json.", variant: "destructive" }),
+    });
   };
 
   const removeAdmin = (a: AdminEntry) => {
-    setAdmins(prev => prev.filter(x => x.steamId !== a.steamId));
-    sendRcon(`sm_removeadmin "${a.steamId}"`, `Admin ${a.name} removido.`);
+    deleteAdminMutation.mutate({ serverId, steamId: a.steamId }, {
+      onSuccess: () => {
+        toast({ title: "Admin removido", description: `${a.name} saiu do admins.json.` });
+        queryClient.invalidateQueries({ queryKey: getListAdminsQueryKey(serverId) });
+      },
+      onError: (err: any) => toast({ title: "Erro ao remover admin", description: err.message || "Falha ao atualizar admins.json.", variant: "destructive" }),
+    });
   };
 
   return (
@@ -356,7 +358,7 @@ function AdminsTab({ serverId, status }: { serverId: number; status: any }) {
           <CardTitle className="font-mono text-sm uppercase tracking-wider flex items-center gap-2">
             <UserPlus className="w-4 h-4 text-primary" /> Adicionar Admin
           </CardTitle>
-          <CardDescription className="text-xs font-mono">Os comandos são enviados via RCON (SourceMod sm_addadmin)</CardDescription>
+          <CardDescription className="text-xs font-mono">Edita o arquivo CounterStrikeSharp admins.json na VPS</CardDescription>
         </CardHeader>
         <CardContent className="pt-5">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -387,7 +389,7 @@ function AdminsTab({ serverId, status }: { serverId: number; status: any }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SM_FLAGS.map(f => (
+                  {CSS_FLAGS.map(f => (
                     <SelectItem key={f.value} value={f.value} className="font-mono text-xs">{f.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -404,7 +406,7 @@ function AdminsTab({ serverId, status }: { serverId: number; status: any }) {
                   className="font-mono text-xs bg-background/50"
                   data-testid="input-admin-immunity"
                 />
-                <Button onClick={addAdmin} disabled={rconMutation.isPending} className="font-mono text-xs uppercase shrink-0" data-testid="btn-add-admin">
+                <Button onClick={addAdmin} disabled={upsertAdminMutation.isPending} className="font-mono text-xs uppercase shrink-0" data-testid="btn-add-admin">
                   <UserPlus className="w-4 h-4" />
                 </Button>
               </div>
@@ -428,11 +430,15 @@ function AdminsTab({ serverId, status }: { serverId: number; status: any }) {
               <TableHead className="font-mono text-xs uppercase tracking-wider">SteamID</TableHead>
               <TableHead className="font-mono text-xs uppercase tracking-wider text-center">Flags</TableHead>
               <TableHead className="font-mono text-xs uppercase tracking-wider text-center">Imunidade</TableHead>
-              <TableHead className="font-mono text-xs uppercase tracking-wider text-right">Ação</TableHead>
+              <TableHead className="font-mono text-xs uppercase tracking-wider text-right">AÃ§Ã£o</TableHead>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {admins.length === 0 ? (
+        </TableHeader>
+        <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center p-10 text-muted-foreground font-mono text-sm">Carregando admins...</TableCell>
+              </TableRow>
+            ) : admins.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center p-10 text-muted-foreground font-mono text-sm">Nenhum admin cadastrado</TableCell>
               </TableRow>
@@ -465,7 +471,7 @@ function AdminsTab({ serverId, status }: { serverId: number; status: any }) {
   );
 }
 
-// ─── Maps ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Maps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const CS2_MAPS = [
   { id: "de_dust2",      name: "Dust II",        type: "Oficial" },
   { id: "de_mirage",     name: "Mirage",         type: "Oficial" },
@@ -538,7 +544,7 @@ function MapsTab({ serverId, status }: { serverId: number; status: any }) {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground font-mono mt-2">
-            Enviará: <span className="text-primary">changelevel workshop/{"<ID>"}</span>
+            EnviarÃ¡: <span className="text-primary">changelevel workshop/{"<ID>"}</span>
           </p>
         </CardContent>
       </Card>
@@ -596,7 +602,7 @@ function MapsTab({ serverId, status }: { serverId: number; status: any }) {
   );
 }
 
-// ─── Plugins ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Plugins â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PluginsTab({ serverId, status }: { serverId: number; status: any }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -618,7 +624,7 @@ function PluginsTab({ serverId, status }: { serverId: number; status: any }) {
     });
   };
 
-  if (!status?.agentReachable) return <EmptyState text="Agente inacessível" />;
+  if (!status?.agentReachable) return <EmptyState text="Agente inacessÃ­vel" />;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -634,7 +640,7 @@ function PluginsTab({ serverId, status }: { serverId: number; status: any }) {
                     {plugin.name}
                     {plugin.enabled && <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />}
                   </CardTitle>
-                  <CardDescription className="font-mono text-xs mt-0.5">v{plugin.version}{plugin.author ? ` · ${plugin.author}` : ""}</CardDescription>
+                  <CardDescription className="font-mono text-xs mt-0.5">v{plugin.version}{plugin.author ? ` Â· ${plugin.author}` : ""}</CardDescription>
                 </div>
                 <Button
                   variant="outline"
@@ -660,7 +666,7 @@ function PluginsTab({ serverId, status }: { serverId: number; status: any }) {
   );
 }
 
-// ─── Logs ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Logs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function LogsTab({ serverId }: { serverId: number }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { data: logs, isLoading } = useGetServerLogs(serverId, { lines: 100 }, {
@@ -687,7 +693,7 @@ function LogsTab({ serverId }: { serverId: number }) {
           {isLoading && !logs
             ? <div className="text-primary animate-pulse">Conectando stream...</div>
             : !logs?.length
-              ? <div className="text-muted-foreground">Sem logs disponíveis</div>
+              ? <div className="text-muted-foreground">Sem logs disponÃ­veis</div>
               : logs.map((log) => (
                 <div key={log.id} className="flex gap-3 hover:bg-white/5 px-1 rounded">
                   <span className="text-muted-foreground opacity-50 shrink-0 w-[140px]">{log.timestamp.split('T')[1]?.replace('Z','') ?? log.timestamp}</span>
@@ -702,7 +708,7 @@ function LogsTab({ serverId }: { serverId: number }) {
   );
 }
 
-// ─── Console ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Console â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const QUICK_COMMANDS = [
   {
     category: "Partida",
@@ -722,9 +728,9 @@ const QUICK_COMMANDS = [
       { label: "Kick Todos Bots", cmd: "bot_kick" },
       { label: "Add Bot CT", cmd: "bot_add ct" },
       { label: "Add Bot TR", cmd: "bot_add t" },
-      { label: "Dif. Fácil", cmd: "bot_difficulty 0" },
-      { label: "Dif. Médio", cmd: "bot_difficulty 2" },
-      { label: "Dif. Difícil", cmd: "bot_difficulty 3" },
+      { label: "Dif. FÃ¡cil", cmd: "bot_difficulty 0" },
+      { label: "Dif. MÃ©dio", cmd: "bot_difficulty 2" },
+      { label: "Dif. DifÃ­cil", cmd: "bot_difficulty 3" },
       { label: "Dif. Expert", cmd: "bot_difficulty 4" },
     ],
   },
@@ -733,8 +739,8 @@ const QUICK_COMMANDS = [
     cmds: [
       { label: "FF Ligado", cmd: "mp_friendlyfire 1" },
       { label: "FF Desligado", cmd: "mp_friendlyfire 0" },
-      { label: "Balanço Auto ON", cmd: "mp_autoteambalance 1" },
-      { label: "Balanço Auto OFF", cmd: "mp_autoteambalance 0" },
+      { label: "BalanÃ§o Auto ON", cmd: "mp_autoteambalance 1" },
+      { label: "BalanÃ§o Auto OFF", cmd: "mp_autoteambalance 0" },
       { label: "30 Rounds", cmd: "mp_maxrounds 30" },
       { label: "24 Rounds", cmd: "mp_maxrounds 24" },
       { label: "Sem Limite", cmd: "mp_maxrounds 0" },
@@ -758,10 +764,10 @@ const QUICK_COMMANDS = [
     cmds: [
       { label: "Status", cmd: "status" },
       { label: "Stats", cmd: "stats" },
-      { label: "Listar Plugins", cmd: "sm plugins list" },
-      { label: "Recarregar Plugins", cmd: "sm plugins refresh" },
-      { label: "Recarregar Admins", cmd: "sm_reloadadmins" },
-      { label: "Versão", cmd: "version" },
+      { label: "Listar Plugins", cmd: "css_plugins list" },
+      { label: "Recarregar WeaponPaints", cmd: "css_plugins reload WeaponPaints" },
+      { label: "Recarregar AdminPlus", cmd: "css_plugins reload AdminPlusv1.0.7" },
+      { label: "VersÃ£o", cmd: "version" },
     ],
   },
 ];
@@ -782,7 +788,7 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
     setHistory(h => [...h, { type: "req", text: `> ${cmd}` }]);
     rconMutation.mutate({ serverId, data: { command: cmd } }, {
       onSuccess: (res: any) => {
-        const text = res?.data?.response ?? res?.response ?? "OK — comando executado.";
+        const text = res?.data?.response ?? res?.response ?? "OK â€” comando executado.";
         setHistory(h => [...h, { type: "res", text }]);
       },
       onError: (err: any) => {
@@ -810,10 +816,10 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
           data-testid="btn-toggle-quickcmds"
         >
           <span className="font-mono text-xs uppercase tracking-widest text-primary flex items-center gap-2">
-            <Terminal className="w-3.5 h-3.5" /> Comandos Rápidos
+            <Terminal className="w-3.5 h-3.5" /> Comandos RÃ¡pidos
           </span>
           <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
-            {showQuick ? "▲ recolher" : "▼ expandir"}
+            {showQuick ? "â–² recolher" : "â–¼ expandir"}
           </span>
         </button>
 
@@ -857,15 +863,15 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
           <CardTitle className="font-mono text-xs uppercase tracking-widest flex items-center gap-2 text-primary">
             <Terminal className="w-3 h-3" /> RCON
             {status?.online
-              ? <span className="text-primary">· ONLINE</span>
-              : <span className="text-muted-foreground">· OFFLINE</span>}
-            {rconMutation.isPending && <span className="text-yellow-500 animate-pulse">· enviando...</span>}
+              ? <span className="text-primary">Â· ONLINE</span>
+              : <span className="text-muted-foreground">Â· OFFLINE</span>}
+            {rconMutation.isPending && <span className="text-yellow-500 animate-pulse">Â· enviando...</span>}
           </CardTitle>
         </CardHeader>
         <ScrollArea className="flex-1" ref={scrollRef}>
           <div className="p-4 font-mono text-xs leading-relaxed space-y-0.5">
             <div className="text-muted-foreground/60 mb-3 text-[10px]">
-              Sessão iniciada — {new Date().toLocaleTimeString("pt-BR")}
+              SessÃ£o iniciada â€” {new Date().toLocaleTimeString("pt-BR")}
             </div>
             {history.map((entry, i) => (
               <div
@@ -912,7 +918,7 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
   );
 }
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function EmptyState({ text }: { text: string }) {
   return (
     <div className="p-12 text-center text-muted-foreground border border-dashed border-border rounded-lg font-mono text-sm uppercase tracking-widest">
@@ -920,3 +926,5 @@ function EmptyState({ text }: { text: string }) {
     </div>
   );
 }
+
+

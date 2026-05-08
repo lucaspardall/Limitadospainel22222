@@ -570,6 +570,74 @@ paths:
                 $ref: "#/components/schemas/AgentResponse"
 
   # ─── Dashboard ───────────────────────────────────────────────────────────────
+  /servers/{serverId}/admins:
+    get:
+      operationId: listAdmins
+      tags: [admins]
+      summary: List CounterStrikeSharp admins from admins.json
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Admin list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminEntry"
+    post:
+      operationId: upsertAdmin
+      tags: [admins]
+      summary: Add or update a CounterStrikeSharp admin
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminBody"
+      responses:
+        "200":
+          description: Admin saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
+  /servers/{serverId}/admins/{steamId}:
+    delete:
+      operationId: deleteAdmin
+      tags: [admins]
+      summary: Remove a CounterStrikeSharp admin
+      parameters:
+        - name: serverId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: steamId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Admin removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary

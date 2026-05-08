@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ import {
   Zap, Target, RefreshCcw, BookOpen, Settings2, Swords
 } from "lucide-react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type GameMode = {
   id: number;
   serverId: number;
@@ -32,7 +32,7 @@ type GameMode = {
   createdAt: string;
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const GM_LABELS: Record<string, string> = {
   "0-0": "Casual", "0-1": "Competitivo", "0-2": "Wingman",
   "1-0": "Arms Race", "1-2": "Deathmatch",
@@ -51,14 +51,14 @@ const MODE_ICONS: Record<string, React.ElementType> = {
 };
 
 const DEFAULT_MODES = [
-  { displayName: "Competitive", name: "competitive", description: "Modo competitivo com MatchZy", gameType: 0, gameMode: 1, plugins: ["matchzy.smx"], configs: ["competitive.cfg"], cvars: {}, mapgroup: "mg_active" },
-  { displayName: "Retake", name: "retake", description: "Prática de retake em bombsites", gameType: 0, gameMode: 1, plugins: ["retakes.smx"], configs: ["retake.cfg"], cvars: {}, mapgroup: "mg_active" },
-  { displayName: "Deathmatch", name: "deathmatch", description: "Treino de mira, frags rápidos", gameType: 1, gameMode: 2, plugins: ["deathmatch.smx"], configs: ["deathmatch.cfg"], cvars: { "mp_restartgame": "1" }, mapgroup: "mg_deathmatch" },
-  { displayName: "1v1 Arena", name: "arena", description: "Duelos 1v1 em arenas", gameType: 0, gameMode: 0, plugins: ["1v1arena.smx"], configs: ["1v1.cfg"], cvars: { "mp_maxrounds": "30" }, mapgroup: "mg_arena" },
-  { displayName: "Treino", name: "practice", description: "Prática com granadas e cheats", gameType: 0, gameMode: 1, plugins: ["practice.smx"], configs: ["practice.cfg"], cvars: { "sv_cheats": "1" }, mapgroup: "mg_active" },
+  { displayName: "Competitive", name: "competitive", description: "Modo competitivo padrao", gameType: 0, gameMode: 1, plugins: [], configs: ["gamemode_competitive_server.cfg"], cvars: { "bot_quota": "0", "mp_restartgame": "1" }, mapgroup: "mg_active" },
+  { displayName: "Casual", name: "casual", description: "Modo casual publico", gameType: 0, gameMode: 0, plugins: [], configs: ["server.cfg"], cvars: { "bot_quota": "0", "mp_restartgame": "1" }, mapgroup: "mg_active" },
+  { displayName: "Deathmatch", name: "deathmatch", description: "Treino de mira com respawn rapido", gameType: 1, gameMode: 2, plugins: [], configs: ["gamemode_deathmatch.cfg"], cvars: { "bot_quota": "0", "mp_restartgame": "1" }, mapgroup: "mg_deathmatch" },
+  { displayName: "Skins", name: "skins", description: "WeaponPaints, PlayerSettings e MenuManager", gameType: 0, gameMode: 1, plugins: ["WeaponPaints", "PlayerSettings", "MenuManagerCore"], configs: [], cvars: {}, mapgroup: "mg_active" },
+  { displayName: "Admins", name: "admins", description: "AdminPlus para comandos administrativos", gameType: 0, gameMode: 1, plugins: ["AdminPlusv1.0.7"], configs: [], cvars: {}, mapgroup: "mg_active" },
 ];
 
-// ─── Auth fetch ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Auth fetch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const authFetch = (path: string, opts: RequestInit = {}) => {
   const token = localStorage.getItem("cs2_token") ?? "";
   return fetch(path, {
@@ -71,7 +71,7 @@ const authFetch = (path: string, opts: RequestInit = {}) => {
   });
 };
 
-// ─── Form helpers ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Form helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const emptyForm = () => ({
   displayName: "", name: "", description: "",
   gameType: "0", gameMode: "1",
@@ -79,7 +79,7 @@ const emptyForm = () => ({
   mapgroup: "mg_active",
 });
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function ModesTab({ serverId }: { serverId: number }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -90,7 +90,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
   const [isDialogOpen, setIsDialogOpen]   = useState(false);
   const [form, setForm]                   = useState(emptyForm());
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Fetch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const { data: modes, isLoading } = useQuery<GameMode[]>({
     queryKey: MODES_KEY,
     queryFn: async () => {
@@ -103,7 +103,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
 
   const activeMode = modes?.find(m => m.isActive);
 
-  // ── Activate ───────────────────────────────────────────────────────────────
+  // â”€â”€ Activate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const activateMutation = useMutation({
     mutationFn: async (modeId: number) => {
       setActivatingId(modeId);
@@ -118,7 +118,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
       toast({
         title: "Modo ativado!",
         description: agentOk
-          ? `${data.mode?.displayName} ativado — servidor reiniciando...`
+          ? `${data.mode?.displayName} ativado â€” servidor reiniciando...`
           : `${data.mode?.displayName} salvo no painel. Agente: ${data.agentResult?.message ?? "sem resposta"}`,
       });
     },
@@ -128,7 +128,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
     onSettled: () => setActivatingId(null),
   });
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const deleteMutation = useMutation({
     mutationFn: async (modeId: number) => {
       setDeletingId(modeId);
@@ -137,7 +137,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: MODES_KEY });
-      toast({ title: "Modo excluído" });
+      toast({ title: "Modo excluÃ­do" });
     },
     onError: (err: any) => {
       toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" });
@@ -145,7 +145,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
     onSettled: () => setDeletingId(null),
   });
 
-  // ── Create ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Create â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const createMutation = useMutation({
     mutationFn: async (payload: object) => {
       const res = await authFetch(`/api/servers/${serverId}/modes`, {
@@ -167,7 +167,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
     },
   });
 
-  // ── Seed defaults ─────────────────────────────────────────────────────────
+  // â”€â”€ Seed defaults â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const seedMutation = useMutation({
     mutationFn: async () => {
       for (const m of DEFAULT_MODES) {
@@ -182,14 +182,14 @@ export function ModesTab({ serverId }: { serverId: number }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: MODES_KEY });
-      toast({ title: "Modos padrão criados!" });
+      toast({ title: "Modos padrÃ£o criados!" });
     },
     onError: (err: any) => {
-      toast({ title: "Erro ao criar modos padrão", description: err.message, variant: "destructive" });
+      toast({ title: "Erro ao criar modos padrÃ£o", description: err.message, variant: "destructive" });
     },
   });
 
-  // ── Form helpers ───────────────────────────────────────────────────────────
+  // â”€â”€ Form helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleFormChange = (field: string, value: string) => {
     setForm(f => {
       const updated = { ...f, [field]: value };
@@ -204,7 +204,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
 
   const handleCreate = () => {
     if (!form.displayName.trim() || !form.name.trim()) {
-      toast({ title: "Nome e slug são obrigatórios", variant: "destructive" });
+      toast({ title: "Nome e slug sÃ£o obrigatÃ³rios", variant: "destructive" });
       return;
     }
     const plugins = form.pluginsText.split("\n").map(s => s.trim()).filter(Boolean);
@@ -222,7 +222,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
     });
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -253,7 +253,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
         </div>
 
         <div className="flex gap-2">
-          {/* Seed button — only if empty */}
+          {/* Seed button â€” only if empty */}
           {modes?.length === 0 && (
             <Button
               variant="outline"
@@ -266,7 +266,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
               {seedMutation.isPending
                 ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
                 : <Zap className="w-3 h-3 mr-1.5" />}
-              Criar Modos Padrão
+              Criar Modos PadrÃ£o
             </Button>
           )}
 
@@ -293,8 +293,8 @@ export function ModesTab({ serverId }: { serverId: number }) {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Descrição</Label>
-                  <Input value={form.description} onChange={e => handleFormChange("description", e.target.value)} placeholder="Descrição do modo" className="font-mono text-sm bg-background/50" />
+                  <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">DescriÃ§Ã£o</Label>
+                  <Input value={form.description} onChange={e => handleFormChange("description", e.target.value)} placeholder="DescriÃ§Ã£o do modo" className="font-mono text-sm bg-background/50" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -302,10 +302,10 @@ export function ModesTab({ serverId }: { serverId: number }) {
                     <Select value={form.gameType} onValueChange={v => handleFormChange("gameType", v)}>
                       <SelectTrigger className="font-mono text-xs bg-background/50"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="0" className="font-mono text-xs">0 — Classic</SelectItem>
-                        <SelectItem value="1" className="font-mono text-xs">1 — Arms Race</SelectItem>
-                        <SelectItem value="2" className="font-mono text-xs">2 — Training</SelectItem>
-                        <SelectItem value="3" className="font-mono text-xs">3 — Custom</SelectItem>
+                        <SelectItem value="0" className="font-mono text-xs">0 â€” Classic</SelectItem>
+                        <SelectItem value="1" className="font-mono text-xs">1 â€” Arms Race</SelectItem>
+                        <SelectItem value="2" className="font-mono text-xs">2 â€” Training</SelectItem>
+                        <SelectItem value="3" className="font-mono text-xs">3 â€” Custom</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -314,25 +314,25 @@ export function ModesTab({ serverId }: { serverId: number }) {
                     <Select value={form.gameMode} onValueChange={v => handleFormChange("gameMode", v)}>
                       <SelectTrigger className="font-mono text-xs bg-background/50"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="0" className="font-mono text-xs">0 — Casual / Arms Race</SelectItem>
-                        <SelectItem value="1" className="font-mono text-xs">1 — Competitivo</SelectItem>
-                        <SelectItem value="2" className="font-mono text-xs">2 — Wingman / DM</SelectItem>
+                        <SelectItem value="0" className="font-mono text-xs">0 â€” Casual / Arms Race</SelectItem>
+                        <SelectItem value="1" className="font-mono text-xs">1 â€” Competitivo</SelectItem>
+                        <SelectItem value="2" className="font-mono text-xs">2 â€” Wingman / DM</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Plugins (.smx) — um por linha</Label>
+                  <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Plugins CounterStrikeSharp — um por linha</Label>
                   <textarea
                     value={form.pluginsText}
                     onChange={e => handleFormChange("pluginsText", e.target.value)}
                     rows={3}
-                    placeholder={"matchzy.smx\ncs2fixes.smx"}
+                    placeholder={"WeaponPaints\nPlayerSettings\nMenuManagerCore"}
                     className="w-full rounded-md border border-border bg-background/50 px-3 py-2 font-mono text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 placeholder:text-muted-foreground/50"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Configs (.cfg) — um por linha</Label>
+                  <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Configs (.cfg) â€” um por linha</Label>
                   <textarea
                     value={form.configsText}
                     onChange={e => handleFormChange("configsText", e.target.value)}
@@ -342,7 +342,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">CVARs — KEY=VALUE, um por linha</Label>
+                  <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">CVARs â€” KEY=VALUE, um por linha</Label>
                   <textarea
                     value={form.cvarsText}
                     onChange={e => handleFormChange("cvarsText", e.target.value)}
@@ -374,7 +374,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
           <Gamepad2 className="w-12 h-12 text-muted-foreground mx-auto opacity-30" />
           <div>
             <div className="text-muted-foreground font-mono text-sm font-medium">Nenhum modo configurado</div>
-            <div className="text-muted-foreground/60 text-xs font-mono mt-1">Crie os modos padrão ou adicione um modo personalizado</div>
+            <div className="text-muted-foreground/60 text-xs font-mono mt-1">Crie os modos padrÃ£o ou adicione um modo personalizado</div>
           </div>
           <Button
             variant="outline"
@@ -383,7 +383,7 @@ export function ModesTab({ serverId }: { serverId: number }) {
             className="font-mono text-xs uppercase border-primary/30 text-primary hover:bg-primary/10"
           >
             {seedMutation.isPending ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Zap className="w-3 h-3 mr-2" />}
-            Criar Modos Padrão
+            Criar Modos PadrÃ£o
           </Button>
         </div>
       )}
@@ -506,3 +506,6 @@ export function ModesTab({ serverId }: { serverId: number }) {
     </div>
   );
 }
+
+
+

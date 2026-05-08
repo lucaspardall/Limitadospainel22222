@@ -166,6 +166,20 @@ export interface Plugin {
   enabled: boolean;
 }
 
+export interface AdminEntry {
+  steamId: string;
+  name: string;
+  flags: string;
+  immunity: number;
+}
+
+export interface AdminBody {
+  steamId: string;
+  name?: string;
+  flags?: string;
+  immunity?: number;
+}
+
 export interface DashboardSummary {
   totalServers: number;
   onlineServers: number;

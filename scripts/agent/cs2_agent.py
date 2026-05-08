@@ -36,12 +36,21 @@ parser.add_argument("--rcon-port",     default=27015,  type=int)
 parser.add_argument("--rcon-password", default="")
 parser.add_argument("--cs2-dir",       default="/home/steam/cs2")
 parser.add_argument("--cs2-process",   default="cs2")
+parser.add_argument("--plugin-system", default="css", choices=["css", "sourcemod"])
+parser.add_argument("--compose-dir",   default="", help="Docker Compose project directory for Docker-based servers")
+parser.add_argument("--compose-service", default="cs2-server")
+parser.add_argument("--container-name", default="cs2-server")
 args = parser.parse_args()
 
 # ─── Paths ─────────────────────────────────────────────────────────────────────
 CSGO_DIR    = os.path.join(args.cs2_dir, "game", "csgo")
 SM_PLUGINS  = os.path.join(CSGO_DIR, "addons", "sourcemod", "plugins")
 SM_DISABLED = os.path.join(SM_PLUGINS, "disabled")
+CSS_PLUGINS = os.path.join(CSGO_DIR, "addons", "counterstrikesharp", "plugins")
+CSS_DISABLED = os.path.join(CSGO_DIR, "addons", "counterstrikesharp", "plugins-disabled")
+PLUGIN_DIR = CSS_PLUGINS if args.plugin_system == "css" else SM_PLUGINS
+PLUGIN_DISABLED_DIR = CSS_DISABLED if args.plugin_system == "css" else SM_DISABLED
+CSS_ADMINS_CFG = os.path.join(CSGO_DIR, "addons", "counterstrikesharp", "configs", "admins.json")
 LOG_FILE    = os.path.join(CSGO_DIR, "logs", "server.log")
 CSTV_CFG    = os.path.join(CSGO_DIR, "limitados_cstv.json")
 
@@ -112,11 +121,220 @@ class RCONClient:
 rcon = RCONClient(args.rcon_host, args.rcon_port, args.rcon_password)
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
+def run_cmd(cmd, cwd=None, timeout=120):
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+
+def docker_mode():
+    return bool(args.compose_dir)
+
 def is_running():
+    if docker_mode():
+        try:
+            result = run_cmd(["docker", "inspect", "-f", "{{.State.Running}}", args.container_name], timeout=20)
+            return result.returncode == 0 and result.stdout.strip().lower() == "true"
+        except Exception:
+            return False
     try:
         return subprocess.run(["pgrep", "-x", args.cs2_process], capture_output=True).returncode == 0
     except Exception:
         return False
+
+def start_server():
+    if docker_mode():
+        result = run_cmd(["docker", "start", args.container_name], timeout=120)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "docker start failed")
+        return "Servidor iniciando via Docker."
+    start_script = os.path.join(args.cs2_dir, "start.sh")
+    if not os.path.exists(start_script):
+        raise FileNotFoundError(f"start.sh nao encontrado em {args.cs2_dir}")
+    subprocess.Popen(["bash", start_script], cwd=args.cs2_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return "Servidor iniciando via start.sh."
+
+def stop_server():
+    if docker_mode():
+        result = run_cmd(["docker", "stop", args.container_name], timeout=120)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "docker stop failed")
+        return "Servidor parado via Docker."
+    try:
+        rcon.send("quit")
+    except Exception:
+        pass
+    subprocess.run(["pkill", "-x", args.cs2_process], capture_output=True)
+    return "Servidor parado."
+
+def restart_server():
+    if docker_mode():
+        result = run_cmd(["docker", "restart", args.container_name], timeout=180)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "docker restart failed")
+        return "Servidor reiniciando via Docker."
+    try:
+        rcon.send("quit")
+        time.sleep(3)
+    except Exception:
+        pass
+    return start_server()
+
+def update_server():
+    if docker_mode():
+        pull = run_cmd(["docker", "compose", "pull", args.compose_service], cwd=args.compose_dir, timeout=900)
+        if pull.returncode != 0:
+            raise RuntimeError(pull.stderr.strip() or pull.stdout.strip() or "docker compose pull failed")
+        up = run_cmd(["docker", "compose", "up", "-d", "--no-deps", "--force-recreate", args.compose_service], cwd=args.compose_dir, timeout=300)
+        if up.returncode != 0:
+            raise RuntimeError(up.stderr.strip() or up.stdout.strip() or "docker compose up failed")
+        return "Imagem atualizada e servidor recriado via Docker Compose."
+    update_script = os.path.join(args.cs2_dir, "update.sh")
+    if os.path.exists(update_script):
+        subprocess.Popen(["bash", update_script], cwd=args.cs2_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return "Atualizacao iniciada via update.sh."
+    subprocess.run(["steamcmd", "+login", "anonymous", "+app_update", "730", "+quit"], capture_output=True, text=True, timeout=300)
+    return "Atualizado via SteamCMD."
+
+def safe_plugin_id(plugin_id):
+    name = os.path.basename(plugin_id.strip().strip("/\\"))
+    if not name or name in (".", ".."):
+        raise ValueError("Plugin invalido")
+    return name
+
+def plugin_active_path(plugin_id):
+    return os.path.join(PLUGIN_DIR, safe_plugin_id(plugin_id))
+
+def plugin_disabled_path(plugin_id):
+    return os.path.join(PLUGIN_DISABLED_DIR, safe_plugin_id(plugin_id))
+
+def set_plugin_enabled(plugin_id, enabled):
+    os.makedirs(PLUGIN_DIR, exist_ok=True)
+    os.makedirs(PLUGIN_DISABLED_DIR, exist_ok=True)
+    src = plugin_disabled_path(plugin_id) if enabled else plugin_active_path(plugin_id)
+    dst = plugin_active_path(plugin_id) if enabled else plugin_disabled_path(plugin_id)
+    if not os.path.exists(src):
+        if os.path.exists(dst):
+            return f"Plugin {safe_plugin_id(plugin_id)} ja esta {'ativo' if enabled else 'desativado'}."
+        raise FileNotFoundError(f"Plugin {safe_plugin_id(plugin_id)} nao encontrado")
+    if os.path.exists(dst):
+        shutil.rmtree(dst) if os.path.isdir(dst) else os.remove(dst)
+    shutil.move(src, dst)
+    return f"Plugin {safe_plugin_id(plugin_id)} {'ativado' if enabled else 'desativado'}."
+
+def list_filesystem_plugins():
+    plugins = []
+    for folder, enabled in ((PLUGIN_DIR, True), (PLUGIN_DISABLED_DIR, False)):
+        if not os.path.isdir(folder):
+            continue
+        for name in sorted(os.listdir(folder)):
+            path = os.path.join(folder, name)
+            if args.plugin_system == "sourcemod" and not name.endswith(".smx"):
+                continue
+            if args.plugin_system == "css" and not os.path.isdir(path):
+                continue
+            plugins.append({
+                "id": name,
+                "name": name,
+                "version": "",
+                "author": "",
+                "description": f"{args.plugin_system} plugin",
+                "enabled": enabled,
+            })
+    return plugins
+
+def normalize_flags(flags):
+    if isinstance(flags, list):
+        return [str(flag).strip() for flag in flags if str(flag).strip()]
+    text = str(flags or "@css/root").strip()
+    if not text:
+        return ["@css/root"]
+    sep = "," if "," in text else " "
+    return [flag.strip() for flag in text.split(sep) if flag.strip()]
+
+def load_css_admins_raw():
+    if not os.path.exists(CSS_ADMINS_CFG):
+        return {}
+    with open(CSS_ADMINS_CFG, "r", encoding="utf-8") as f:
+        content = f.read().strip()
+    if not content:
+        return {}
+    data = json.loads(content)
+    return data if isinstance(data, dict) else {}
+
+def normalize_css_admins(data):
+    admins = []
+    for name, value in data.items():
+        if not isinstance(value, dict):
+            continue
+        steam_id = str(value.get("identity") or name)
+        flags = normalize_flags(value.get("flags", []))
+        immunity = value.get("immunity", 0)
+        try:
+            immunity = int(immunity)
+        except Exception:
+            immunity = 0
+        admins.append({
+            "steamId": steam_id,
+            "name": str(name),
+            "flags": " ".join(flags),
+            "immunity": immunity,
+        })
+    return sorted(admins, key=lambda a: a["name"].lower())
+
+def list_css_admins():
+    return normalize_css_admins(load_css_admins_raw())
+
+def reload_admin_plugin():
+    for cmd in ("css_plugins reload AdminPlusv1.0.7", "css_plugins reload AdminPlus"):
+        try:
+            rcon.send(cmd)
+            return
+        except Exception:
+            pass
+
+def save_css_admin(steam_id, name, flags, immunity):
+    steam_id = str(steam_id or "").strip()
+    if not steam_id:
+        raise ValueError("steamId obrigatorio")
+    name = str(name or steam_id).strip() or steam_id
+    flag_list = normalize_flags(flags)
+    try:
+        immunity = int(immunity)
+    except Exception:
+        immunity = 50
+    immunity = max(0, min(100, immunity))
+
+    data = load_css_admins_raw()
+    for key, value in list(data.items()):
+        if key == name or (isinstance(value, dict) and str(value.get("identity", "")) == steam_id):
+            data.pop(key, None)
+    data[name] = {"identity": steam_id, "flags": flag_list, "immunity": immunity}
+
+    os.makedirs(os.path.dirname(CSS_ADMINS_CFG), exist_ok=True)
+    tmp = CSS_ADMINS_CFG + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.replace(tmp, CSS_ADMINS_CFG)
+    reload_admin_plugin()
+    return {"steamId": steam_id, "name": name, "flags": " ".join(flag_list), "immunity": immunity}
+
+def delete_css_admin(steam_id):
+    steam_id = str(steam_id or "").strip()
+    data = load_css_admins_raw()
+    removed = None
+    for key, value in list(data.items()):
+        if key == steam_id or (isinstance(value, dict) and str(value.get("identity", "")) == steam_id):
+            removed = key
+            data.pop(key, None)
+    if removed is None:
+        raise FileNotFoundError("Admin nao encontrado")
+    os.makedirs(os.path.dirname(CSS_ADMINS_CFG), exist_ok=True)
+    tmp = CSS_ADMINS_CFG + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.replace(tmp, CSS_ADMINS_CFG)
+    reload_admin_plugin()
+    return removed
 
 def get_uptime():
     try:
@@ -230,6 +448,42 @@ def get_recording_size():
 # ─── Game mode switcher ─────────────────────────────────────────────────────────
 def switch_mode(name, game_type, game_mode, plugins, configs, cvars, mapgroup, restart=True):
     log = []
+    if args.plugin_system == "css":
+        moved_on, missing = [], []
+        for plugin in plugins:
+            try:
+                set_plugin_enabled(plugin, True)
+                moved_on.append(plugin)
+            except FileNotFoundError:
+                missing.append(plugin)
+                log.append(f"AVISO: {plugin} nao encontrado")
+            except Exception as e:
+                log.append(f"ERRO: {plugin}: {e}")
+        if plugins:
+            log.append(f"Ativados {len(moved_on)} plugins CounterStrikeSharp")
+
+        try:
+            rcon.send(f"game_type {game_type}")
+            rcon.send(f"game_mode {game_mode}")
+            log.append(f"RCON: game_type={game_type} game_mode={game_mode}")
+            for cfg in configs:
+                rcon.send(f"exec {cfg}")
+                log.append(f"RCON exec: {cfg}")
+            for key, val in cvars.items():
+                rcon.send(f"{key} {val}")
+            if mapgroup:
+                rcon.send(f"sv_mapgroup {mapgroup}")
+        except Exception as e:
+            log.append(f"AVISO RCON: {e}")
+
+        if restart:
+            try:
+                log.append(restart_server())
+            except Exception as e:
+                log.append(f"AVISO restart: {e}")
+
+        return True, log, missing
+
     os.makedirs(SM_PLUGINS, exist_ok=True)
     os.makedirs(SM_DISABLED, exist_ok=True)
 
@@ -389,22 +643,31 @@ class AgentHandler(BaseHTTPRequestHandler):
 
         # /server/plugins
         if path == "/server/plugins":
-            plugins = []
+            plugins = list_filesystem_plugins()
             try:
-                out = rcon.send("sm plugins list")
-                for line in out.splitlines():
-                    if ". " in line:
-                        parts = line.strip().split(". ", 1)
-                        if len(parts) == 2:
-                            plugins.append({
-                                "id": parts[0].strip(),
-                                "name": parts[1].split("(")[0].strip(),
-                                "version": "1.0", "author": "",
-                                "description": parts[1].strip(), "enabled": True,
-                            })
+                out = rcon.send("css_plugins list" if args.plugin_system == "css" else "sm plugins list")
+                if args.plugin_system == "sourcemod":
+                    for line in out.splitlines():
+                        if ". " in line:
+                            parts = line.strip().split(". ", 1)
+                            if len(parts) == 2:
+                                plugins.append({
+                                    "id": parts[0].strip(),
+                                    "name": parts[1].split("(")[0].strip(),
+                                    "version": "1.0", "author": "",
+                                    "description": parts[1].strip(), "enabled": True,
+                                })
             except Exception:
                 pass
             return self._send(200, plugins)
+
+        if path == "/server/admins":
+            if args.plugin_system != "css":
+                return self._send(400, {"error": "Admins API is only available for CounterStrikeSharp"})
+            try:
+                return self._send(200, list_css_admins())
+            except Exception as e:
+                return self._send(500, {"error": str(e)})
 
         # /server/demos — list demo files
         if path == "/server/demos":
@@ -486,6 +749,18 @@ class AgentHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, {"success": False, "message": str(e)})
 
+        if path.startswith("/server/admins/") and path.count("/") == 3:
+            steam_id = path.split("/server/admins/", 1)[1]
+            if args.plugin_system != "css":
+                return self._send(400, {"success": False, "message": "Admins API is only available for CounterStrikeSharp"})
+            try:
+                removed = delete_css_admin(steam_id)
+                return self._send(200, {"success": True, "message": f"Admin {removed} removido."})
+            except FileNotFoundError as e:
+                return self._send(404, {"success": False, "message": str(e)})
+            except Exception as e:
+                return self._send(500, {"success": False, "message": str(e)})
+
         self._send(404, {"error": "Not found"})
 
     # ── POST ───────────────────────────────────────────────────────────────────
@@ -497,50 +772,54 @@ class AgentHandler(BaseHTTPRequestHandler):
 
         # /server/start
         if path == "/server/start":
-            start_script = os.path.join(args.cs2_dir, "start.sh")
-            if not os.path.exists(start_script):
-                return self._send(500, {"success": False, "message": f"start.sh nao encontrado em {args.cs2_dir}"})
             try:
-                subprocess.Popen(["bash", start_script], cwd=args.cs2_dir,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                return self._send(200, {"success": True, "message": "Servidor iniciando..."})
+                return self._send(200, {"success": True, "message": start_server()})
             except Exception as e:
                 return self._send(500, {"success": False, "message": str(e)})
 
         # /server/stop
         if path == "/server/stop":
-            try: rcon.send("quit")
-            except Exception: pass
-            try: subprocess.run(["pkill", "-x", args.cs2_process])
-            except Exception: pass
-            return self._send(200, {"success": True, "message": "Servidor parado."})
+            try:
+                return self._send(200, {"success": True, "message": stop_server()})
+            except Exception as e:
+                return self._send(500, {"success": False, "message": str(e)})
 
         # /server/restart
         if path == "/server/restart":
             try:
-                rcon.send("quit")
-                time.sleep(3)
-                start_script = os.path.join(args.cs2_dir, "start.sh")
-                if os.path.exists(start_script):
-                    subprocess.Popen(["bash", start_script], cwd=args.cs2_dir,
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return self._send(200, {"success": True, "message": restart_server()})
             except Exception as e:
                 return self._send(500, {"success": False, "message": str(e)})
-            return self._send(200, {"success": True, "message": "Servidor reiniciando..."})
 
         # /server/update
         if path == "/server/update":
             try:
-                update_script = os.path.join(args.cs2_dir, "update.sh")
-                if os.path.exists(update_script):
-                    subprocess.Popen(["bash", update_script], cwd=args.cs2_dir,
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    return self._send(200, {"success": True, "message": "Atualização iniciada..."})
-                subprocess.run(
-                    ["steamcmd", "+login", "anonymous", "+app_update", "730", "validate", "+quit"],
-                    capture_output=True, text=True, timeout=300
+                return self._send(200, {"success": True, "message": update_server()})
+            except Exception as e:
+                return self._send(500, {"success": False, "message": str(e)})
+
+        if path.startswith("/server/plugins/") and (path.endswith("/enable") or path.endswith("/disable")):
+            parts = path.split("/")
+            plugin_id = parts[3] if len(parts) >= 5 else ""
+            enabled = path.endswith("/enable")
+            try:
+                message = set_plugin_enabled(plugin_id, enabled)
+                return self._send(200, {"success": True, "message": message})
+            except Exception as e:
+                return self._send(500, {"success": False, "message": str(e)})
+
+        if path == "/server/admins":
+            if args.plugin_system != "css":
+                return self._send(400, {"success": False, "message": "Admins API is only available for CounterStrikeSharp"})
+            body = self._body()
+            try:
+                admin = save_css_admin(
+                    body.get("steamId") or body.get("steamid"),
+                    body.get("name"),
+                    body.get("flags", "@css/root"),
+                    body.get("immunity", 50),
                 )
-                return self._send(200, {"success": True, "message": "Atualizado via SteamCMD."})
+                return self._send(200, {"success": True, "message": f"Admin {admin['name']} salvo.", "admin": admin})
             except Exception as e:
                 return self._send(500, {"success": False, "message": str(e)})
 
@@ -672,7 +951,9 @@ if __name__ == "__main__":
     print(f"  Porta:    {args.port}")
     print(f"  RCON:     {args.rcon_host}:{args.rcon_port}")
     print(f"  CS2 dir:  {args.cs2_dir}")
-    print(f"  Plugins:  {SM_PLUGINS}")
+    print(f"  Plugins:  {PLUGIN_DIR} ({args.plugin_system})")
+    if docker_mode():
+        print(f"  Docker:   {args.container_name} em {args.compose_dir}")
     print(f"  Demos:    {get_demo_folder()}")
     print(f"  Token:    {'*' * len(args.token)}")
     print("=" * 62)
@@ -685,3 +966,4 @@ if __name__ == "__main__":
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nAgente encerrado.")
+

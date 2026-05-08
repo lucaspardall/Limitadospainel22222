@@ -197,26 +197,7 @@ router.get("/servers/:serverId/logs", authMiddleware, async (req: any, res: any)
   const lines = req.query.lines ? parseInt(req.query.lines as string, 10) : 100;
   const result = await forwardToAgent(s.agentUrl, s.agentToken, `/server/logs?lines=${lines}`, "GET");
   if (!result.success) {
-    // Return simulated logs when agent is unreachable
-    const now = new Date();
-    const mock = Array.from({ length: 10 }, (_, i) => ({
-      id: `sim-${i}`,
-      timestamp: new Date(now.getTime() - i * 10000).toISOString(),
-      level: (["info", "info", "warn", "info", "debug", "info", "error", "info", "info", "info"] as const)[i],
-      message: [
-        "Server running on de_dust2",
-        "Player connected: user123",
-        "High ping detected for player",
-        "Round started",
-        "Tick rate: 128",
-        "Match ended: CT win",
-        "Plugin error: failed to load",
-        "Player disconnected: user456",
-        "Map change requested",
-        "Server started",
-      ][i],
-    }));
-    return res.json(mock);
+    return res.status(502).json({ error: result.message || "Agent not reachable" });
   }
   const d = (result.data ?? []) as any;
   return res.json(Array.isArray(d) ? d : d.logs ?? []);
@@ -229,12 +210,7 @@ router.get("/servers/:serverId/players", authMiddleware, async (req: any, res: a
   if (!s) return res.status(404).json({ error: "Server not found" });
   const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/players", "GET");
   if (!result.success) {
-    // Simulate players when agent is not reachable
-    return res.json([
-      { steamId: "76561198000000001", name: "AWP_God", score: 24, ping: 42, duration: "32:15", ip: null },
-      { steamId: "76561198000000002", name: "FragMaster", score: 18, ping: 67, duration: "28:40", ip: null },
-      { steamId: "76561198000000003", name: "CT_King", score: 12, ping: 89, duration: "15:02", ip: null },
-    ]);
+    return res.status(502).json({ error: result.message || "Agent not reachable" });
   }
   const d = (result.data ?? []) as any;
   return res.json(Array.isArray(d) ? d : d.players ?? []);
@@ -279,13 +255,7 @@ router.get("/servers/:serverId/plugins", authMiddleware, async (req: any, res: a
   if (!s) return res.status(404).json({ error: "Server not found" });
   const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/plugins", "GET");
   if (!result.success) {
-    return res.json([
-      { id: "metamod", name: "Metamod:Source", version: "2.0", author: "AlliedModders", description: "Platform for SourceMod", enabled: true },
-      { id: "sourcemod", name: "SourceMod", version: "1.12", author: "AlliedModders", description: "Server modification system", enabled: true },
-      { id: "cs2fixes", name: "CS2Fixes", version: "1.5", author: "danielga", description: "Various bug fixes for CS2", enabled: true },
-      { id: "matchzy", name: "MatchZy", version: "0.8.2", author: "shubhgarg", description: "Competitive match management", enabled: false },
-      { id: "retakes", name: "Retakes", version: "2.1.0", author: "splewis", description: "Retake bombsite practice", enabled: false },
-    ]);
+    return res.status(502).json({ error: result.message || "Agent not reachable" });
   }
   const d = (result.data ?? []) as any;
   return res.json(Array.isArray(d) ? d : d.plugins ?? []);
@@ -298,7 +268,8 @@ router.post("/servers/:serverId/plugins/:pluginId/enable", authMiddleware, async
   if (!s) return res.status(404).json({ error: "Server not found" });
   const result = await forwardToAgent(s.agentUrl, s.agentToken, `/server/plugins/${req.params.pluginId}/enable`, "POST");
   await logActivity("plugin_change", `Enabled plugin ${req.params.pluginId}`, s.id, s.name, req.user?.userId, req.user?.username);
-  return res.json(result.success ? result : { success: true, message: "Plugin enable forwarded (agent not reachable, cached)" });
+  if (!result.success) return res.status(502).json({ error: result.message || "Agent not reachable" });
+  return res.json(result);
 });
 
 // POST /api/servers/:serverId/plugins/:pluginId/disable
@@ -308,10 +279,45 @@ router.post("/servers/:serverId/plugins/:pluginId/disable", authMiddleware, asyn
   if (!s) return res.status(404).json({ error: "Server not found" });
   const result = await forwardToAgent(s.agentUrl, s.agentToken, `/server/plugins/${req.params.pluginId}/disable`, "POST");
   await logActivity("plugin_change", `Disabled plugin ${req.params.pluginId}`, s.id, s.name, req.user?.userId, req.user?.username);
-  return res.json(result.success ? result : { success: true, message: "Plugin disable forwarded (agent not reachable, cached)" });
+  if (!result.success) return res.status(502).json({ error: result.message || "Agent not reachable" });
+  return res.json(result);
 });
 
 // ─── CSTV / Demos ────────────────────────────────────────────────────────────
+
+// GET /api/servers/:serverId/admins
+router.get("/servers/:serverId/admins", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/admins", "GET");
+  if (!result.success) return res.status(502).json({ error: result.message || "Agent not reachable" });
+  const d = (result.data ?? []) as any;
+  return res.json(Array.isArray(d) ? d : d.admins ?? []);
+});
+
+// POST /api/servers/:serverId/admins
+router.post("/servers/:serverId/admins", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/admins", "POST", req.body);
+  await logActivity("rcon_command", `Admin atualizado: ${req.body?.steamId ?? req.body?.steamid ?? "desconhecido"}`, s.id, s.name, req.user?.userId, req.user?.username);
+  if (!result.success) return res.status(502).json({ error: result.message || "Agent not reachable" });
+  return res.json(result);
+});
+
+// DELETE /api/servers/:serverId/admins/:steamId
+router.delete("/servers/:serverId/admins/:steamId", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const steamId = encodeURIComponent(req.params.steamId);
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, `/server/admins/${steamId}`, "DELETE");
+  await logActivity("rcon_command", `Admin removido: ${req.params.steamId}`, s.id, s.name, req.user?.userId, req.user?.username);
+  if (!result.success) return res.status(502).json({ error: result.message || "Agent not reachable" });
+  return res.json(result);
+});
 
 async function streamFromAgent(
   agentUrl: string,
