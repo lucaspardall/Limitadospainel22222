@@ -102,7 +102,7 @@ export default function ServerDetail() {
             {status && isReachable && (
               <span className="text-xs font-mono text-muted-foreground">
                 {status.playerCount}/{status.maxPlayers} jogadores
-                {status.map ? ` Â· ${status.map}` : ""}
+                {status.map ? ` - ${status.map}` : ""}
               </span>
             )}
           </div>
@@ -207,11 +207,11 @@ function OverviewTab({ serverId: _serverId, status, isLoading }: any) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
       {[
-        { icon: Users, label: "Players", value: isLoading ? "â€”" : `${status?.playerCount ?? 0}/${status?.maxPlayers ?? 0}` },
-        { icon: Map,   label: "Mapa",    value: isLoading ? "â€”" : (status?.map ?? "â€”"), primary: true },
-        { icon: Cpu,   label: "CPU",     value: isLoading ? "â€”" : `${status?.cpuUsage?.toFixed(1) ?? 0}%` },
-        { icon: MemoryStick, label: "RAM", value: isLoading ? "â€”" : `${status?.ramUsage ?? 0} MB` },
-        { icon: Clock, label: "Uptime",  value: isLoading ? "â€”" : (status?.uptime ?? "0s") },
+        { icon: Users, label: "Players", value: isLoading ? "-" : `${status?.playerCount ?? 0}/${status?.maxPlayers ?? 0}` },
+        { icon: Map,   label: "Mapa",    value: isLoading ? "-" : (status?.map ?? "-"), primary: true },
+        { icon: Cpu,   label: "CPU",     value: isLoading ? "-" : `${status?.cpuUsage?.toFixed(1) ?? 0}%` },
+        { icon: MemoryStick, label: "RAM", value: isLoading ? "-" : `${status?.ramUsage ?? 0} MB` },
+        { icon: Clock, label: "Uptime",  value: isLoading ? "-" : (status?.uptime ?? "0s") },
       ].map(({ icon: Icon, label, value, primary }) => (
         <Card key={label} className="bg-card border-border">
           <CardContent className="pt-5 pb-4">
@@ -646,7 +646,7 @@ function PluginsTab({ serverId, status }: { serverId: number; status: any }) {
                     {plugin.name}
                     {plugin.enabled && <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />}
                   </CardTitle>
-                  <CardDescription className="font-mono text-xs mt-0.5">v{plugin.version}{plugin.author ? ` Â· ${plugin.author}` : ""}</CardDescription>
+                  <CardDescription className="font-mono text-xs mt-0.5">v{plugin.version}{plugin.author ? ` - ${plugin.author}` : ""}</CardDescription>
                 </div>
                 <Button
                   variant="outline"
@@ -724,21 +724,20 @@ const QUICK_COMMANDS = [
       { label: "Iniciar Warmup", cmd: "mp_warmup_start" },
       { label: "Freezetime 0", cmd: "mp_freezetime 0" },
       { label: "Freezetime 15", cmd: "mp_freezetime 15" },
-      { label: "Trocar Lado ON", cmd: "mp_halftime 1" },
-      { label: "Trocar Lado OFF", cmd: "mp_halftime 0" },
+      { label: "Restart Round", cmd: "mp_restartgame 3" },
     ],
   },
   {
     category: "Bots",
     cmds: [
-      { label: "Matar Todos Bots", cmd: "bot_kill" },
-      { label: "Kick Todos Bots", cmd: "bot_kick" },
-      { label: "Add Bot CT", cmd: "bot_add ct" },
-      { label: "Add Bot TR", cmd: "bot_add t" },
-      { label: "Dif. FÃ¡cil", cmd: "bot_difficulty 0" },
-      { label: "Dif. MÃ©dio", cmd: "bot_difficulty 2" },
-      { label: "Dif. DifÃ­cil", cmd: "bot_difficulty 3" },
-      { label: "Dif. Expert", cmd: "bot_difficulty 4" },
+      { label: "Remover Bots", cmd: "bot_kick" },
+      { label: "Matar Bots", cmd: "bot_kill" },
+      { label: "Add Bot CT", cmd: "bot_add_ct" },
+      { label: "Add Bot TR", cmd: "bot_add_t" },
+      { label: "Bot Quota 0", cmd: "bot_quota 0" },
+      { label: "Bot Quota 10", cmd: "bot_quota 10" },
+      { label: "Bot Normal", cmd: "bot_difficulty 2" },
+      { label: "Bot Expert", cmd: "bot_difficulty 4" },
     ],
   },
   {
@@ -746,13 +745,12 @@ const QUICK_COMMANDS = [
     cmds: [
       { label: "FF Ligado", cmd: "mp_friendlyfire 1" },
       { label: "FF Desligado", cmd: "mp_friendlyfire 0" },
-      { label: "BalanÃ§o Auto ON", cmd: "mp_autoteambalance 1" },
-      { label: "BalanÃ§o Auto OFF", cmd: "mp_autoteambalance 0" },
+      { label: "Balanco Auto ON", cmd: "mp_autoteambalance 1" },
+      { label: "Balanco Auto OFF", cmd: "mp_autoteambalance 0" },
+      { label: "Halftime ON", cmd: "mp_halftime 1" },
+      { label: "Halftime OFF", cmd: "mp_halftime 0" },
       { label: "30 Rounds", cmd: "mp_maxrounds 30" },
       { label: "24 Rounds", cmd: "mp_maxrounds 24" },
-      { label: "Sem Limite", cmd: "mp_maxrounds 0" },
-      { label: "Cheats ON", cmd: "sv_cheats 1" },
-      { label: "Cheats OFF", cmd: "sv_cheats 0" },
     ],
   },
   {
@@ -762,6 +760,8 @@ const QUICK_COMMANDS = [
       { label: "Dinheiro Inicial 16000", cmd: "mp_startmoney 16000" },
       { label: "Comprar em Qualquer Lugar", cmd: "mp_buy_anywhere 1" },
       { label: "Comprar na Base", cmd: "mp_buy_anywhere 0" },
+      { label: "Buytime 20s", cmd: "mp_buytime 20" },
+      { label: "Buytime 90s", cmd: "mp_buytime 90" },
       { label: "Impactos ON", cmd: "sv_showimpacts 1" },
       { label: "Impactos OFF", cmd: "sv_showimpacts 0" },
     ],
@@ -771,10 +771,12 @@ const QUICK_COMMANDS = [
     cmds: [
       { label: "Status", cmd: "status" },
       { label: "Stats", cmd: "stats" },
-      { label: "Listar Plugins", cmd: "css_plugins list" },
-      { label: "Recarregar WeaponPaints", cmd: "css_plugins reload WeaponPaints" },
-      { label: "Recarregar AdminPlus", cmd: "css_plugins reload AdminPlusv1.0.7" },
-      { label: "VersÃ£o", cmd: "version" },
+      { label: "Players", cmd: "users" },
+      { label: "Bans SteamID", cmd: "listid" },
+      { label: "Bans IP", cmd: "listip" },
+      { label: "Metamod", cmd: "meta list" },
+      { label: "CSS Plugins", cmd: "css_plugins list" },
+      { label: "Versao", cmd: "version" },
     ],
   },
 ];
@@ -795,7 +797,7 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
     setHistory(h => [...h, { type: "req", text: `> ${cmd}` }]);
     rconMutation.mutate({ serverId, data: { command: cmd } }, {
       onSuccess: (res: any) => {
-        const text = res?.data?.response ?? res?.response ?? "OK â€” comando executado.";
+        const text = res?.data?.response ?? res?.response ?? "OK - comando executado.";
         setHistory(h => [...h, { type: "res", text }]);
       },
       onError: (err: any) => {
@@ -823,10 +825,10 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
           data-testid="btn-toggle-quickcmds"
         >
           <span className="font-mono text-xs uppercase tracking-widest text-primary flex items-center gap-2">
-            <Terminal className="w-3.5 h-3.5" /> Comandos RÃ¡pidos
+            <Terminal className="w-3.5 h-3.5" /> Comandos Rapidos
           </span>
           <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
-            {showQuick ? "â–² recolher" : "â–¼ expandir"}
+            {showQuick ? "recolher" : "expandir"}
           </span>
         </button>
 
@@ -870,15 +872,15 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
           <CardTitle className="font-mono text-xs uppercase tracking-widest flex items-center gap-2 text-primary">
             <Terminal className="w-3 h-3" /> RCON
             {status?.online
-              ? <span className="text-primary">Â· ONLINE</span>
-              : <span className="text-muted-foreground">Â· OFFLINE</span>}
-            {rconMutation.isPending && <span className="text-yellow-500 animate-pulse">Â· enviando...</span>}
+              ? <span className="text-primary">- ONLINE</span>
+              : <span className="text-muted-foreground">- OFFLINE</span>}
+            {rconMutation.isPending && <span className="text-yellow-500 animate-pulse">- enviando...</span>}
           </CardTitle>
         </CardHeader>
         <ScrollArea className="flex-1" ref={scrollRef}>
           <div className="p-4 font-mono text-xs leading-relaxed space-y-0.5">
             <div className="text-muted-foreground/60 mb-3 text-[10px]">
-              SessÃ£o iniciada â€” {new Date().toLocaleTimeString("pt-BR")}
+              Sessao iniciada - {new Date().toLocaleTimeString("pt-BR")}
             </div>
             {history.map((entry, i) => (
               <div
