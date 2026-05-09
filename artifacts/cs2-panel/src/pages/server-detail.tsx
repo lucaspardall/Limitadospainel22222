@@ -41,7 +41,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { 
   Play, Square, RotateCcw, DownloadCloud, Terminal, 
   Activity, Cpu, MemoryStick, Clock, Users, Map, ShieldAlert,
-  ShieldOff, Ban, MessageSquareOff, UserPlus, Trash2, Search, Pencil, Plus
+  ShieldOff, Ban, MessageSquareOff, UserPlus, Trash2, Search, Pencil, Plus, Settings
 } from "lucide-react";
 import { ModesTab } from "@/components/ModesTab";
 import { CSTVTab } from "@/components/CSTVTab";
@@ -204,25 +204,222 @@ export default function ServerDetail() {
 }
 
 // â”€â”€â”€ Overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function OverviewTab({ serverId: _serverId, status, isLoading }: any) {
+function quoteRconValue(value: string) {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function OverviewTab({ serverId, status, isLoading }: any) {
+  const { toast } = useToast();
+  const rconMutation = useSendRconCommand();
+  const [serverName, setServerName] = useState("Limitados Skins");
+  const [serverPassword, setServerPassword] = useState("");
+  const [visiblePlayers, setVisiblePlayers] = useState(String(status?.maxPlayers ?? 20));
+  const [serverTags, setServerTags] = useState("br,limitados,skins");
+  const [botQuota, setBotQuota] = useState("0");
+  const [freezeTime, setFreezeTime] = useState("15");
+  const [roundTime, setRoundTime] = useState("1.92");
+  const [startMoney, setStartMoney] = useState("800");
+
+  useEffect(() => {
+    if (status?.maxPlayers) setVisiblePlayers(String(status.maxPlayers));
+  }, [status?.maxPlayers]);
+
+  const runRcon = (command: string, label: string) => {
+    if (!command.trim() || rconMutation.isPending) return;
+    rconMutation.mutate(
+      { serverId, data: { command } },
+      {
+        onSuccess: () => toast({ title: "Config aplicada", description: label }),
+        onError: (err: any) => toast({
+          title: "Falha ao aplicar",
+          description: err?.message ?? command,
+          variant: "destructive",
+        }),
+      },
+    );
+  };
+
+  const applyPublicPreset = () => runRcon(
+    [
+      "sv_lan 0",
+      "sv_password \"\"",
+      "bot_quota 0",
+      "mp_autoteambalance 1",
+      "mp_limitteams 2",
+      "mp_restartgame 1",
+    ].join("; "),
+    "Servidor publico aplicado.",
+  );
+
+  const applyMatchPreset = () => runRcon(
+    [
+      "bot_quota 0",
+      "mp_freezetime 15",
+      "mp_roundtime 1.92",
+      "mp_maxrounds 24",
+      "mp_halftime 1",
+      "mp_startmoney 800",
+      "mp_restartgame 1",
+    ].join("; "),
+    "Preset competitivo aplicado.",
+  );
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-      {[
-        { icon: Users, label: "Players", value: isLoading ? "-" : `${status?.playerCount ?? 0}/${status?.maxPlayers ?? 0}` },
-        { icon: Map,   label: "Mapa",    value: isLoading ? "-" : (status?.map ?? "-"), primary: true },
-        { icon: Cpu,   label: "CPU",     value: isLoading ? "-" : `${status?.cpuUsage?.toFixed(1) ?? 0}%` },
-        { icon: MemoryStick, label: "RAM", value: isLoading ? "-" : `${status?.ramUsage ?? 0} MB` },
-        { icon: Clock, label: "Uptime",  value: isLoading ? "-" : (status?.uptime ?? "0s") },
-      ].map(({ icon: Icon, label, value, primary }) => (
-        <Card key={label} className="bg-card border-border">
-          <CardContent className="pt-5 pb-4">
-            <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1 mb-2">
-              <Icon className="w-3 h-3" /> {label}
-            </span>
-            <div className={cn("text-2xl font-bold font-mono truncate", primary ? "text-primary" : "")}>{value}</div>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {[
+          { icon: Users, label: "Players", value: isLoading ? "-" : `${status?.playerCount ?? 0}/${status?.maxPlayers ?? 0}` },
+          { icon: Map,   label: "Mapa",    value: isLoading ? "-" : (status?.map ?? "-"), primary: true },
+          { icon: Cpu,   label: "CPU",     value: isLoading ? "-" : `${status?.cpuUsage?.toFixed(1) ?? 0}%` },
+          { icon: MemoryStick, label: "RAM", value: isLoading ? "-" : `${status?.ramUsage ?? 0} MB` },
+          { icon: Clock, label: "Uptime",  value: isLoading ? "-" : (status?.uptime ?? "0s") },
+        ].map(({ icon: Icon, label, value, primary }) => (
+          <Card key={label} className="bg-card border-border">
+            <CardContent className="pt-5 pb-4">
+              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1 mb-2">
+                <Icon className="w-3 h-3" /> {label}
+              </span>
+              <div className={cn("text-2xl font-bold font-mono truncate", primary ? "text-primary" : "")}>{value}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="font-mono text-xs uppercase tracking-widest flex items-center gap-2 text-primary">
+            <Settings className="w-4 h-4" /> Configuracao Rapida
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div className="space-y-2">
+              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Nome</Label>
+              <div className="flex gap-2">
+                <Input value={serverName} onChange={(e) => setServerName(e.target.value)} className="font-mono text-xs bg-background/50" />
+                <Button
+                  size="sm"
+                  disabled={rconMutation.isPending || !serverName.trim()}
+                  onClick={() => runRcon(`hostname ${quoteRconValue(serverName.trim())}`, "Nome atualizado.")}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Senha</Label>
+              <div className="flex gap-2">
+                <Input value={serverPassword} onChange={(e) => setServerPassword(e.target.value)} placeholder="vazio = publico" className="font-mono text-xs bg-background/50" />
+                <Button
+                  size="sm"
+                  disabled={rconMutation.isPending}
+                  onClick={() => runRcon(`sv_password ${quoteRconValue(serverPassword)}`, serverPassword ? "Senha aplicada." : "Senha removida.")}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Max players visivel</Label>
+              <div className="flex gap-2">
+                <Input type="number" min="1" max="64" value={visiblePlayers} onChange={(e) => setVisiblePlayers(e.target.value)} className="font-mono text-xs bg-background/50" />
+                <Button
+                  size="sm"
+                  disabled={rconMutation.isPending || !visiblePlayers.trim()}
+                  onClick={() => runRcon(`sv_visiblemaxplayers ${Number(visiblePlayers) || -1}`, "Slots visiveis atualizados.")}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Tags</Label>
+              <div className="flex gap-2">
+                <Input value={serverTags} onChange={(e) => setServerTags(e.target.value)} className="font-mono text-xs bg-background/50" />
+                <Button
+                  size="sm"
+                  disabled={rconMutation.isPending}
+                  onClick={() => runRcon(`sv_tags ${quoteRconValue(serverTags)}`, "Tags atualizadas.")}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div className="space-y-2">
+              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Bots</Label>
+              <div className="flex gap-2">
+                <Input type="number" min="0" max="32" value={botQuota} onChange={(e) => setBotQuota(e.target.value)} className="font-mono text-xs bg-background/50" />
+                <Button
+                  size="sm"
+                  disabled={rconMutation.isPending}
+                  onClick={() => runRcon(`bot_quota ${Number(botQuota) || 0}; bot_quota_mode normal`, "Bots atualizados.")}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Freezetime</Label>
+              <div className="flex gap-2">
+                <Input type="number" min="0" max="60" value={freezeTime} onChange={(e) => setFreezeTime(e.target.value)} className="font-mono text-xs bg-background/50" />
+                <Button
+                  size="sm"
+                  disabled={rconMutation.isPending}
+                  onClick={() => runRcon(`mp_freezetime ${Number(freezeTime) || 0}`, "Freezetime atualizado.")}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Roundtime</Label>
+              <div className="flex gap-2">
+                <Input type="number" min="0" step="0.01" value={roundTime} onChange={(e) => setRoundTime(e.target.value)} className="font-mono text-xs bg-background/50" />
+                <Button
+                  size="sm"
+                  disabled={rconMutation.isPending}
+                  onClick={() => runRcon(`mp_roundtime ${Number(roundTime) || 0}`, "Roundtime atualizado.")}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Start money</Label>
+              <div className="flex gap-2">
+                <Input type="number" min="0" max="16000" value={startMoney} onChange={(e) => setStartMoney(e.target.value)} className="font-mono text-xs bg-background/50" />
+                <Button
+                  size="sm"
+                  disabled={rconMutation.isPending}
+                  onClick={() => runRcon(`mp_startmoney ${Number(startMoney) || 0}`, "Start money atualizado.")}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+            <Button variant="outline" size="sm" disabled={rconMutation.isPending} onClick={applyPublicPreset}>Publico</Button>
+            <Button variant="outline" size="sm" disabled={rconMutation.isPending} onClick={applyMatchPreset}>Competitivo</Button>
+            <Button variant="outline" size="sm" disabled={rconMutation.isPending} onClick={() => runRcon("mp_friendlyfire 1", "Friendly fire ligado.")}>FF ON</Button>
+            <Button variant="outline" size="sm" disabled={rconMutation.isPending} onClick={() => runRcon("mp_friendlyfire 0", "Friendly fire desligado.")}>FF OFF</Button>
+            <Button variant="outline" size="sm" disabled={rconMutation.isPending} onClick={() => runRcon("mp_autoteambalance 1; mp_limitteams 2", "Balanco ligado.")}>Balance ON</Button>
+            <Button variant="outline" size="sm" disabled={rconMutation.isPending} onClick={() => runRcon("mp_autoteambalance 0; mp_limitteams 0", "Balanco desligado.")}>Balance OFF</Button>
+            <Button variant="outline" size="sm" disabled={rconMutation.isPending} onClick={() => runRcon("sv_lan 0; status", "Modo publico/VAC verificado.")}>VAC/status</Button>
+            <Button variant="outline" size="sm" disabled={rconMutation.isPending} onClick={() => runRcon("mp_restartgame 1", "Partida reiniciada.")}>Restart</Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
