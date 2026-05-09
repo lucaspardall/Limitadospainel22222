@@ -37,10 +37,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   Play, Square, RotateCcw, DownloadCloud, Terminal, 
   Activity, Cpu, MemoryStick, Clock, Users, Map, ShieldAlert,
-  ShieldOff, Ban, MessageSquareOff, UserPlus, Trash2, Search
+  ShieldOff, Ban, MessageSquareOff, UserPlus, Trash2, Search, Pencil, Plus
 } from "lucide-react";
 import { ModesTab } from "@/components/ModesTab";
 import { CSTVTab } from "@/components/CSTVTab";
@@ -715,7 +716,14 @@ function LogsTab({ serverId }: { serverId: number }) {
 }
 
 // â”€â”€â”€ Console â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const QUICK_COMMANDS = [
+type QuickCommand = { label: string; cmd: string };
+type QuickCommandGroup = { category: string; cmds: QuickCommand[] };
+type CustomQuickCommand = QuickCommand & { id: string; category: string };
+
+const CUSTOM_QUICK_COMMANDS_KEY = "limitados.quickCommands.v1";
+const emptyCustomCommand = () => ({ category: "Meus Comandos", label: "", cmd: "" });
+
+const QUICK_COMMANDS: QuickCommandGroup[] = [
   {
     category: "Partida",
     cmds: [
@@ -785,12 +793,81 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<{ type: "req" | "res" | "err"; text: string }[]>([]);
   const [showQuick, setShowQuick] = useState(true);
+  const [customCommands, setCustomCommands] = useState<CustomQuickCommand[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(CUSTOM_QUICK_COMMANDS_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.filter((item) => item?.label && item?.cmd) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isCommandDialogOpen, setIsCommandDialogOpen] = useState(false);
+  const [editingCommandId, setEditingCommandId] = useState<string | null>(null);
+  const [commandForm, setCommandForm] = useState(emptyCustomCommand);
   const rconMutation = useSendRconCommand();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const commandInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [history]);
+
+  useEffect(() => {
+    window.localStorage.setItem(CUSTOM_QUICK_COMMANDS_KEY, JSON.stringify(customCommands));
+  }, [customCommands]);
+
+  const customGroups = customCommands.reduce<QuickCommandGroup[]>((groups, item) => {
+    const category = item.category.trim() || "Meus Comandos";
+    const group = groups.find((g) => g.category === category);
+    const commandItem = { label: item.label, cmd: item.cmd };
+    if (group) group.cmds.push(commandItem);
+    else groups.push({ category, cmds: [commandItem] });
+    return groups;
+  }, []);
+  const quickCommandGroups = [...QUICK_COMMANDS, ...customGroups];
+
+  const editInConsole = (cmd: string) => {
+    setCommand(cmd);
+    window.requestAnimationFrame(() => commandInputRef.current?.focus());
+  };
+
+  const openAddCommand = () => {
+    setEditingCommandId(null);
+    setCommandForm(emptyCustomCommand());
+    setIsCommandDialogOpen(true);
+  };
+
+  const openEditCustomCommand = (item: CustomQuickCommand) => {
+    setEditingCommandId(item.id);
+    setCommandForm({ category: item.category, label: item.label, cmd: item.cmd });
+    setIsCommandDialogOpen(true);
+  };
+
+  const saveCustomCommand = (e: React.FormEvent) => {
+    e.preventDefault();
+    const category = commandForm.category.trim() || "Meus Comandos";
+    const label = commandForm.label.trim();
+    const cmd = commandForm.cmd.trim();
+    if (!label || !cmd) return;
+
+    if (editingCommandId) {
+      setCustomCommands((items) => items.map((item) => (
+        item.id === editingCommandId ? { ...item, category, label, cmd } : item
+      )));
+    } else {
+      const id = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+      setCustomCommands((items) => [...items, { id, category, label, cmd }]);
+    }
+
+    setIsCommandDialogOpen(false);
+    setEditingCommandId(null);
+    setCommandForm(emptyCustomCommand());
+  };
+
+  const deleteCustomCommand = (cmd: string) => {
+    setCustomCommands((items) => items.filter((item) => item.cmd !== cmd));
+  };
 
   const execCommand = (cmd: string) => {
     if (!cmd.trim()) return;
@@ -819,52 +896,138 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
     <div className="space-y-3">
       {/* Quick Commands Panel */}
       <Card className="bg-card border-border overflow-hidden">
-        <button
-          className="w-full flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/20 hover:bg-muted/30 transition-colors"
-          onClick={() => setShowQuick(v => !v)}
-          data-testid="btn-toggle-quickcmds"
-        >
-          <span className="font-mono text-xs uppercase tracking-widest text-primary flex items-center gap-2">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/50 bg-muted/20">
+          <button
+            className="font-mono text-xs uppercase tracking-widest text-primary flex items-center gap-2 hover:text-primary/80"
+            onClick={() => setShowQuick(v => !v)}
+            data-testid="btn-toggle-quickcmds"
+          >
             <Terminal className="w-3.5 h-3.5" /> Comandos Rapidos
-          </span>
-          <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
-            {showQuick ? "recolher" : "expandir"}
-          </span>
-        </button>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              {showQuick ? "recolher" : "expandir"}
+            </span>
+          </button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={openAddCommand}
+            className="h-7 px-2 font-mono text-[10px] uppercase tracking-wider"
+            data-testid="btn-add-quickcmd"
+          >
+            <Plus className="w-3.5 h-3.5" /> Adicionar
+          </Button>
+        </div>
 
         {showQuick && (
           <div className="p-4 space-y-5">
-            {QUICK_COMMANDS.map(({ category, cmds }) => (
+            {quickCommandGroups.map(({ category, cmds }) => (
               <div key={category}>
                 <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2.5 pb-1 border-b border-border/30">
                   {category}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5">
-                  {cmds.map(({ label, cmd }) => (
-                    <button
-                      key={cmd}
-                      onClick={() => execCommand(cmd)}
-                      disabled={rconMutation.isPending}
-                      title={cmd}
-                      data-testid={`btn-qcmd-${cmd.replace(/\s+/g, "-")}`}
-                      className={cn(
-                        "group text-left px-3 py-2 rounded border font-mono text-xs transition-all duration-100",
-                        "border-border bg-muted/20 text-foreground",
-                        "hover:border-primary hover:bg-primary/10 hover:text-primary",
-                        "disabled:opacity-50 disabled:cursor-not-allowed",
-                        "active:scale-[0.97]"
-                      )}
-                    >
-                      <span className="block font-medium leading-tight">{label}</span>
-                      <span className="block text-[9px] text-muted-foreground group-hover:text-primary/60 mt-0.5 truncate">{cmd}</span>
-                    </button>
-                  ))}
+                  {cmds.map(({ label, cmd }) => {
+                    const customItem = customCommands.find((item) => item.cmd === cmd);
+                    return (
+                      <div key={`${category}-${cmd}`} className="relative group">
+                        <button
+                          onClick={() => execCommand(cmd)}
+                          disabled={rconMutation.isPending}
+                          title={cmd}
+                          data-testid={`btn-qcmd-${cmd.replace(/\s+/g, "-")}`}
+                          className={cn(
+                            "w-full text-left px-3 py-2 pr-16 rounded border font-mono text-xs transition-all duration-100",
+                            "border-border bg-muted/20 text-foreground",
+                            "hover:border-primary hover:bg-primary/10 hover:text-primary",
+                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                            "active:scale-[0.97]"
+                          )}
+                        >
+                          <span className="block font-medium leading-tight truncate">{label}</span>
+                          <span className="block text-[9px] text-muted-foreground group-hover:text-primary/60 mt-0.5 truncate">{cmd}</span>
+                        </button>
+                        <div className="absolute right-1.5 top-1.5 flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => customItem ? openEditCustomCommand(customItem) : editInConsole(cmd)}
+                            title={customItem ? "Editar atalho" : "Editar no RCON"}
+                            className="h-6 w-6 rounded border border-border bg-background/80 text-muted-foreground hover:text-primary hover:border-primary"
+                            data-testid={`btn-edit-qcmd-${cmd.replace(/\s+/g, "-")}`}
+                          >
+                            <Pencil className="w-3 h-3 mx-auto" />
+                          </button>
+                          {customItem && (
+                            <button
+                              type="button"
+                              onClick={() => deleteCustomCommand(cmd)}
+                              title="Remover atalho"
+                              className="h-6 w-6 rounded border border-border bg-background/80 text-muted-foreground hover:text-destructive hover:border-destructive"
+                              data-testid={`btn-delete-qcmd-${cmd.replace(/\s+/g, "-")}`}
+                            >
+                              <Trash2 className="w-3 h-3 mx-auto" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      <Dialog open={isCommandDialogOpen} onOpenChange={setIsCommandDialogOpen}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="font-mono uppercase tracking-widest">
+              {editingCommandId ? "Editar Comando" : "Adicionar Comando"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={saveCustomCommand} className="space-y-4">
+            <div className="space-y-2">
+              <Label className="font-mono text-xs uppercase tracking-wider">Categoria</Label>
+              <Input
+                value={commandForm.category}
+                onChange={(e) => setCommandForm((form) => ({ ...form, category: e.target.value }))}
+                placeholder="Meus Comandos"
+                className="font-mono text-sm bg-background/50"
+                data-testid="input-quickcmd-category"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="font-mono text-xs uppercase tracking-wider">Nome do botao</Label>
+              <Input
+                value={commandForm.label}
+                onChange={(e) => setCommandForm((form) => ({ ...form, label: e.target.value }))}
+                placeholder="Trocar para Mirage"
+                className="font-mono text-sm bg-background/50"
+                data-testid="input-quickcmd-label"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="font-mono text-xs uppercase tracking-wider">Comando RCON</Label>
+              <Input
+                value={commandForm.cmd}
+                onChange={(e) => setCommandForm((form) => ({ ...form, cmd: e.target.value }))}
+                placeholder="changelevel de_mirage"
+                className="font-mono text-sm bg-background/50"
+                data-testid="input-quickcmd-command"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCommandDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={!commandForm.label.trim() || !commandForm.cmd.trim()}>
+                Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Terminal */}
       <Card className="bg-[#0a0a0c] border-border overflow-hidden flex flex-col h-[380px]">
@@ -903,6 +1066,7 @@ function ConsoleTab({ serverId, status }: { serverId: number; status: any }) {
         <div className="p-2.5 border-t border-border/50 bg-black/40 flex-shrink-0">
           <form onSubmit={onSubmit} className="flex gap-2">
             <Input
+              ref={commandInputRef}
               value={command}
               onChange={e => setCommand(e.target.value)}
               disabled={rconMutation.isPending}
