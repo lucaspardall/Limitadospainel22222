@@ -45,15 +45,19 @@ const MODE_ICONS: Record<string, React.ElementType> = {
   competitive: Target,
   retake: RefreshCcw,
   deathmatch: Zap,
+  wingman: Swords,
+  armsrace: Zap,
   practice: BookOpen,
   arena: Swords,
   treino: BookOpen,
 };
 
 const DEFAULT_MODES = [
-  { displayName: "Competitive", name: "competitive", description: "Modo competitivo padrao", gameType: 0, gameMode: 1, plugins: [], configs: ["gamemode_competitive_server.cfg"], cvars: { "bot_quota": "0", "mp_restartgame": "1" }, mapgroup: "mg_active" },
-  { displayName: "Casual", name: "casual", description: "Modo casual publico", gameType: 0, gameMode: 0, plugins: [], configs: ["server.cfg"], cvars: { "bot_quota": "0", "mp_restartgame": "1" }, mapgroup: "mg_active" },
-  { displayName: "Deathmatch", name: "deathmatch", description: "Treino de mira com respawn rapido", gameType: 1, gameMode: 2, plugins: [], configs: ["gamemode_deathmatch.cfg"], cvars: { "bot_quota": "0", "mp_restartgame": "1" }, mapgroup: "mg_deathmatch" },
+  { displayName: "Competitive", name: "competitive", description: "Modo competitivo padrao (MR12)", gameType: 0, gameMode: 1, plugins: [], configs: ["gamemode_competitive_server.cfg"], cvars: { "bot_quota": "0", "mp_maxrounds": "24", "mp_roundtime": "1.92", "mp_freezetime": "15", "mp_warmuptime": "30", "mp_halftime": "1", "mp_startmoney": "800", "mp_restartgame": "1" }, mapgroup: "mg_active" },
+  { displayName: "Casual", name: "casual", description: "Modo casual publico", gameType: 0, gameMode: 0, plugins: [], configs: ["server.cfg"], cvars: { "bot_quota": "0", "mp_maxrounds": "15", "mp_roundtime": "2.25", "mp_freezetime": "7", "mp_warmuptime": "60", "mp_startmoney": "1000", "mp_restartgame": "1" }, mapgroup: "mg_active" },
+  { displayName: "Wingman", name: "wingman", description: "Competitivo 2v2 em bomb site unico", gameType: 0, gameMode: 2, plugins: [], configs: ["gamemode_competitive_server.cfg"], cvars: { "bot_quota": "0", "mp_maxrounds": "16", "mp_roundtime": "1.5", "mp_freezetime": "10", "mp_warmuptime": "30", "mp_halftime": "1", "mp_startmoney": "800", "mp_restartgame": "1" }, mapgroup: "mg_active" },
+  { displayName: "Deathmatch", name: "deathmatch", description: "Treino de mira com respawn rapido", gameType: 1, gameMode: 2, plugins: [], configs: ["gamemode_deathmatch.cfg"], cvars: { "bot_quota": "0", "mp_maxrounds": "0", "mp_roundtime": "10", "mp_freezetime": "0", "mp_warmuptime": "5", "mp_restartgame": "1" }, mapgroup: "mg_deathmatch" },
+  { displayName: "Arms Race", name: "armsrace", description: "Gun Game progressivo com troca de arma a cada kill", gameType: 1, gameMode: 0, plugins: [], configs: ["gamemode_armsrace.cfg"], cvars: { "bot_quota": "0", "mp_maxrounds": "0", "mp_freezetime": "3", "mp_warmuptime": "15", "mp_restartgame": "1" }, mapgroup: "mg_armsrace" },
   { displayName: "Skins", name: "skins", description: "WeaponPaints, PlayerSettings e MenuManager", gameType: 0, gameMode: 1, plugins: ["WeaponPaints", "PlayerSettings", "MenuManagerCore"], configs: [], cvars: {}, mapgroup: "mg_active" },
   { displayName: "Admins", name: "admins", description: "AdminPlus para comandos administrativos", gameType: 0, gameMode: 1, plugins: ["AdminPlusv1.0.7"], configs: [], cvars: {}, mapgroup: "mg_active" },
 ];
@@ -314,9 +318,9 @@ export function ModesTab({ serverId }: { serverId: number }) {
                     <Select value={form.gameMode} onValueChange={v => handleFormChange("gameMode", v)}>
                       <SelectTrigger className="font-mono text-xs bg-background/50"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="0" className="font-mono text-xs">0 â€” Casual / Arms Race</SelectItem>
-                        <SelectItem value="1" className="font-mono text-xs">1 â€” Competitivo</SelectItem>
-                        <SelectItem value="2" className="font-mono text-xs">2 â€” Wingman / DM</SelectItem>
+                        <SelectItem value="0" className="font-mono text-xs">0 - Casual / Arms Race</SelectItem>
+                        <SelectItem value="1" className="font-mono text-xs">1 - Competitivo</SelectItem>
+                        <SelectItem value="2" className="font-mono text-xs">2 - Wingman / DM</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -506,6 +510,5 @@ export function ModesTab({ serverId }: { serverId: number }) {
     </div>
   );
 }
-
 
 

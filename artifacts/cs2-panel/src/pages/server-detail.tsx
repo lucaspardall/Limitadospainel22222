@@ -477,14 +477,15 @@ const CS2_MAPS = [
   { id: "de_mirage",     name: "Mirage",         type: "Oficial" },
   { id: "de_inferno",    name: "Inferno",        type: "Oficial" },
   { id: "de_nuke",       name: "Nuke",           type: "Oficial" },
-  { id: "de_overpass",   name: "Overpass",       type: "Oficial" },
   { id: "de_ancient",    name: "Ancient",        type: "Oficial" },
   { id: "de_anubis",     name: "Anubis",         type: "Oficial" },
+  { id: "de_train",      name: "Train",          type: "Oficial" },
   { id: "de_vertigo",    name: "Vertigo",        type: "Oficial" },
+  { id: "de_overpass",   name: "Overpass",       type: "Oficial" },
   { id: "cs_office",     name: "Office",         type: "Oficial" },
   { id: "cs_italy",      name: "Italy",          type: "Oficial" },
-  { id: "ar_shoots",     name: "Shoots (Arms Race)", type: "Oficial" },
-  { id: "ar_baggage",    name: "Baggage (Arms Race)", type: "Oficial" },
+  { id: "ar_shoots",     name: "Shoots",         type: "Arms Race" },
+  { id: "ar_baggage",    name: "Baggage",        type: "Arms Race" },
 ];
 
 function MapsTab({ serverId, status }: { serverId: number; status: any }) {
@@ -493,20 +494,25 @@ function MapsTab({ serverId, status }: { serverId: number; status: any }) {
   const [workshopId, setWorkshopId] = useState("");
   const [search, setSearch] = useState("");
 
-  const sendMap = (mapId: string, label: string) => {
+  const sendCommand = (command: string, successMessage: string) => {
     if (!status?.online) {
       toast({ title: "Servidor offline", description: "Servidor precisa estar online.", variant: "destructive" });
       return;
     }
-    rconMutation.mutate({ serverId, data: { command: `changelevel ${mapId}` } }, {
-      onSuccess: () => toast({ title: "Mapa alterado", description: `Carregando ${label}...` }),
+    rconMutation.mutate({ serverId, data: { command } }, {
+      onSuccess: () => toast({ title: "Comando enviado", description: successMessage }),
       onError: () => toast({ title: "Erro", description: "Falha ao trocar mapa.", variant: "destructive" }),
     });
   };
 
+  const sendMap = (mapId: string, label: string) => {
+    sendCommand(`changelevel ${mapId}`, `Carregando ${label}...`);
+  };
+
   const loadWorkshop = () => {
-    if (!workshopId.trim()) return;
-    sendMap(`workshop/${workshopId.trim()}`, `Workshop ${workshopId}`);
+    const id = workshopId.trim();
+    if (!id) return;
+    sendCommand(`host_workshop_map ${id}`, `Carregando mapa da Oficina ${id}...`);
     setWorkshopId("");
   };
 
@@ -544,7 +550,7 @@ function MapsTab({ serverId, status }: { serverId: number; status: any }) {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground font-mono mt-2">
-            EnviarÃ¡: <span className="text-primary">changelevel workshop/{"<ID>"}</span>
+            EnviarÃ¡: <span className="text-primary">host_workshop_map {"<ID>"}</span>
           </p>
         </CardContent>
       </Card>
@@ -716,9 +722,10 @@ const QUICK_COMMANDS = [
       { label: "Reiniciar Partida", cmd: "mp_restartgame 1" },
       { label: "Encerrar Warmup", cmd: "mp_warmup_end" },
       { label: "Iniciar Warmup", cmd: "mp_warmup_start" },
-      { label: "Intervalo", cmd: "mp_halftime" },
-      { label: "Pausar Servidor", cmd: "sv_pausable 1; pause" },
-      { label: "Retomar Servidor", cmd: "unpause" },
+      { label: "Freezetime 0", cmd: "mp_freezetime 0" },
+      { label: "Freezetime 15", cmd: "mp_freezetime 15" },
+      { label: "Trocar Lado ON", cmd: "mp_halftime 1" },
+      { label: "Trocar Lado OFF", cmd: "mp_halftime 0" },
     ],
   },
   {
@@ -751,12 +758,12 @@ const QUICK_COMMANDS = [
   {
     category: "Jogadores",
     cmds: [
-      { label: "Matar Todos", cmd: "mp_restartgame 1" },
-      { label: "Dar Dinheiro Max", cmd: "mp_afterroundmoney 16000" },
-      { label: "God Mode ON", cmd: "god" },
-      { label: "Noclip ON", cmd: "noclip" },
-      { label: "Mostrar HP", cmd: "sv_showimpacts 1" },
-      { label: "Ocultar HP", cmd: "sv_showimpacts 0" },
+      { label: "Dinheiro Inicial 800", cmd: "mp_startmoney 800" },
+      { label: "Dinheiro Inicial 16000", cmd: "mp_startmoney 16000" },
+      { label: "Comprar em Qualquer Lugar", cmd: "mp_buy_anywhere 1" },
+      { label: "Comprar na Base", cmd: "mp_buy_anywhere 0" },
+      { label: "Impactos ON", cmd: "sv_showimpacts 1" },
+      { label: "Impactos OFF", cmd: "sv_showimpacts 0" },
     ],
   },
   {
@@ -926,5 +933,3 @@ function EmptyState({ text }: { text: string }) {
     </div>
   );
 }
-
-
