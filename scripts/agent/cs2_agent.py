@@ -19,6 +19,7 @@ Uso:
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import struct
@@ -374,18 +375,60 @@ def read_logs(lines=100):
                         "level": "error", "message": str(e)})
     return entries
 
+def parse_status(rcon_output):
+    status = {"playerCount": 0, "maxPlayers": 0, "map": None}
+    for line in rcon_output.splitlines():
+        raw = line.strip()
+        map_match = re.search(r"\bmap\s*:\s*([^\s]+)", raw, re.IGNORECASE)
+        if map_match:
+            status["map"] = map_match.group(1).strip()
+            continue
+
+        players_match = re.search(
+            r"\bplayers\s*:\s*(\d+)(?:[^\n]*?\((\d+)\s+max\))?",
+            raw,
+            re.IGNORECASE,
+        )
+        if players_match:
+            status["playerCount"] = int(players_match.group(1))
+            if players_match.group(2):
+                status["maxPlayers"] = int(players_match.group(2))
+            continue
+
+    players = parse_players(rcon_output)
+    if players and status["playerCount"] == 0:
+        status["playerCount"] = len(players)
+
+    return status
+
 def parse_players(rcon_output):
     players = []
     for line in rcon_output.splitlines():
-        parts = line.split()
-        if len(parts) >= 5 and parts[0].isdigit():
-            players.append({
-                "steamId": parts[1] if len(parts) > 1 else "UNKNOWN",
-                "name": parts[2].strip('"') if len(parts) > 2 else "Player",
-                "score": int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0,
-                "ping": int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 0,
-                "duration": parts[5] if len(parts) > 5 else "0:00",
-            })
+        raw = line.strip()
+        if not raw or raw.lower().startswith(("hostname", "version", "udp/ip", "map", "players", "# userid", "userid")):
+            continue
+
+        quoted = re.search(r'"([^"]+)"', raw)
+        if not quoted:
+            continue
+
+        before_name = raw[:quoted.start()].strip()
+        after_name = raw[quoted.end():].strip().split()
+        user_tokens = before_name.lstrip("#").split()
+        user_id = next((token for token in reversed(user_tokens) if token.isdigit()), "")
+        steam_id = next((token for token in after_name if token.startswith(("[U:", "STEAM_", "BOT"))), "BOT")
+        connected = next((token for token in after_name if re.match(r"^\d+:\d{2}(?::\d{2})?$", token)), "0:00")
+        numeric_after = [int(token) for token in after_name if token.isdigit()]
+        ping = numeric_after[0] if numeric_after else 0
+
+        players.append({
+            "steamId": steam_id if steam_id != "BOT" else f"BOT-{user_id or len(players) + 1}",
+            "name": quoted.group(1),
+            "score": 0,
+            "ping": ping,
+            "duration": connected,
+        })
+
     return players
 
 # ─── Demo helpers ───────────────────────────────────────────────────────────────
@@ -612,21 +655,15 @@ class AgentHandler(BaseHTTPRequestHandler):
             running = is_running()
             cpu, ram = get_cpu_ram() if running else (0, 0)
             status = {"online": running, "agentReachable": True,
-                      "playerCount": 0, "maxPlayers": 10, "map": "de_dust2",
+                      "playerCount": 0, "maxPlayers": 0, "map": None,
                       "cpuUsage": cpu, "ramUsage": ram,
                       "uptime": get_uptime() if running else "offline"}
             if running:
                 try:
                     out = rcon.send("status")
-                    for line in out.splitlines():
-                        if "map :" in line.lower():
-                            status["map"] = line.split(":")[-1].strip()
-                        if "players :" in line.lower():
-                            parts = line.split(":")[-1].strip().split()
-                            if parts and parts[0].isdigit():
-                                status["playerCount"] = int(parts[0])
-                except Exception:
-                    pass
+                    status.update(parse_status(out))
+                except Exception as e:
+                    status["error"] = str(e)
             return self._send(200, status)
 
         # /server/logs
