@@ -41,6 +41,7 @@ parser.add_argument("--plugin-system", default="css", choices=["css", "sourcemod
 parser.add_argument("--compose-dir",   default="", help="Docker Compose project directory for Docker-based servers")
 parser.add_argument("--compose-service", default="cs2-server")
 parser.add_argument("--container-name", default="cs2-server")
+parser.add_argument("--startup-file", default="", help="Arquivo .bat/.sh de inicializacao gerenciado pelo painel")
 args = parser.parse_args()
 
 # ─── Paths ─────────────────────────────────────────────────────────────────────
@@ -210,6 +211,377 @@ def update_server():
         return "Atualizacao iniciada via update.sh."
     subprocess.run(["steamcmd", "+login", "anonymous", "+app_update", "730", "+quit"], capture_output=True, text=True, timeout=300)
     return "Atualizado via SteamCMD."
+
+# Startup file parser/generator
+STARTUP_VALUE_KEYS = {
+    "-port": "port",
+    "+ip": "ip",
+    "+maxplayers": "maxPlayers",
+    "+map": "map",
+    "+mapgroup": "mapgroup",
+    "+game_mode": "gameMode",
+    "+game_type": "gameType",
+    "-tickrate": "tickrate",
+    "+sv_lan": "svLan",
+    "+rcon_password": "rconPassword",
+    "+sv_setsteamaccount": "gsltToken",
+    "+hostname": "hostname",
+    "+sv_region": "region",
+    "-region": "region",
+    "+host_workshop_collection": "workshopCollection",
+    "+host_workshop_map": "workshopStartMap",
+    "+exec": "execConfig",
+    "+tv_enable": "hltv",
+}
+
+STARTUP_BOOL_KEYS = {
+    "-console": ("console", True),
+    "-noconsole": ("console", False),
+    "-usercon": ("usercon", True),
+    "-insecure": ("vac", False),
+    "-secure": ("vac", True),
+    "-autorestart": ("autoRestart", True),
+    "-noautorestart": ("autoRestart", False),
+}
+
+STARTUP_ORDER = [
+    ("bool", "-console", "console", True),
+    ("bool", "-usercon", "usercon", True),
+    ("bool", "-insecure", "vac", False),
+    ("value", "-port", "port"),
+    ("value", "+ip", "ip"),
+    ("value", "+maxplayers", "maxPlayers"),
+    ("value", "+map", "map"),
+    ("value", "+mapgroup", "mapgroup"),
+    ("value", "+game_mode", "gameMode"),
+    ("value", "+game_type", "gameType"),
+    ("value", "-tickrate", "tickrate"),
+    ("value", "+sv_lan", "svLan"),
+    ("value", "+rcon_password", "rconPassword"),
+    ("value", "+sv_setsteamaccount", "gsltToken"),
+    ("value", "+hostname", "hostname"),
+    ("value", "+sv_region", "region"),
+    ("value", "+host_workshop_collection", "workshopCollection"),
+    ("value", "+host_workshop_map", "workshopStartMap"),
+    ("value", "+exec", "execConfig"),
+    ("value", "+tv_enable", "hltv"),
+    ("bool", "-autorestart", "autoRestart", True),
+]
+
+def default_startup_config():
+    return {
+        "port": "",
+        "ip": "",
+        "maxPlayers": "",
+        "map": "",
+        "mapgroup": "",
+        "gameMode": "",
+        "gameType": "",
+        "tickrate": "",
+        "console": False,
+        "usercon": False,
+        "vac": True,
+        "svLan": "",
+        "rconPassword": "",
+        "gsltToken": "",
+        "hostname": "",
+        "region": "",
+        "workshopCollection": "",
+        "workshopStartMap": "",
+        "execConfig": "",
+        "hltv": False,
+        "autoRestart": False,
+        "customParams": "",
+        "additionalFlags": [],
+    }
+
+def resolve_startup_path(path):
+    if not path:
+        return ""
+    if os.path.isabs(path):
+        return os.path.abspath(path)
+    base = args.compose_dir or args.cs2_dir
+    return os.path.abspath(os.path.join(base, path))
+
+def startup_candidate_paths():
+    candidates = []
+    if args.startup_file:
+        candidates.append(resolve_startup_path(args.startup_file))
+    for base in [args.compose_dir, args.cs2_dir]:
+        if not base:
+            continue
+        for name in ["start.bat", "start-server.bat", "server.bat", "cs2-startup.bat", "start.sh"]:
+            candidates.append(os.path.abspath(os.path.join(base, name)))
+    return candidates
+
+def find_startup_file():
+    for path in startup_candidate_paths():
+        if path and os.path.exists(path):
+            return path
+    if args.startup_file:
+        return resolve_startup_path(args.startup_file)
+    base = args.compose_dir or args.cs2_dir
+    return os.path.abspath(os.path.join(base, "cs2-startup.bat"))
+
+def startup_path_allowed(path):
+    path = os.path.abspath(path)
+    roots = [p for p in [args.cs2_dir, args.compose_dir] if p]
+    if args.startup_file and path == resolve_startup_path(args.startup_file):
+        return True
+    for root in roots:
+        root_abs = os.path.abspath(root)
+        if path == root_abs or path.startswith(root_abs + os.sep):
+            return True
+    return False
+
+def tokenize_startup_command(command):
+    tokens, current, quote = [], "", None
+    for ch in command.strip():
+        if quote:
+            if ch == quote:
+                quote = None
+            else:
+                current += ch
+            continue
+        if ch in ("'", '"'):
+            quote = ch
+        elif ch.isspace():
+            if current:
+                tokens.append(current)
+                current = ""
+        else:
+            current += ch
+    if current:
+        tokens.append(current)
+    return tokens
+
+def quote_startup_token(token):
+    token = "" if token is None else str(token)
+    if token == "" or any(ch.isspace() for ch in token) or '"' in token:
+        return '"' + token.replace('"', '\\"') + '"'
+    return token
+
+def startup_command_from_tokens(tokens):
+    return " ".join(quote_startup_token(t) for t in tokens if str(t) != "")
+
+def bool_from_value(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on", "enabled")
+
+def value_to_token(value):
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    return str(value).strip()
+
+def default_startup_prefix(path):
+    if str(path).lower().endswith(".sh"):
+        return ["./srcds_run", "-game", "csgo"]
+    return ["start", "/wait", "srcds.exe", "-game", "csgo"]
+
+def is_startup_command_line(line):
+    stripped = line.strip()
+    if not stripped:
+        return False
+    lower = stripped.lower()
+    if lower.startswith(("rem ", "::", "#", "@echo", "echo ", "cd ", "set ")):
+        return False
+    markers = ("srcds", "srcds.exe", "srcds_run", "+game_type", "+game_mode", "+map", "+maxplayers", "+sv_setsteamaccount", "-port")
+    return any(m in lower for m in markers)
+
+def extract_startup_command(raw):
+    lines = raw.splitlines()
+    for i, line in enumerate(lines):
+        if is_startup_command_line(line):
+            return line.strip(), i
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped and not stripped.lower().startswith(("rem ", "::", "#", "@echo", "echo ")):
+            return stripped, i
+    return "", -1
+
+def find_first_managed_index(tokens):
+    for i, token in enumerate(tokens):
+        key = token.lower()
+        if key in STARTUP_VALUE_KEYS or key in STARTUP_BOOL_KEYS:
+            return i
+    return -1
+
+def parse_startup_tokens(tokens, path):
+    config = default_startup_config()
+    first_managed = find_first_managed_index(tokens)
+    prefix = tokens[:first_managed] if first_managed >= 0 else (tokens or default_startup_prefix(path))
+    rest = tokens[first_managed:] if first_managed >= 0 else []
+    unknown = []
+    flags = []
+    i = 0
+    while i < len(rest):
+        token = rest[i]
+        key = token.lower()
+        if key in STARTUP_VALUE_KEYS:
+            field = STARTUP_VALUE_KEYS[key]
+            value = rest[i + 1] if i + 1 < len(rest) else ""
+            if field in ("hltv",):
+                config[field] = bool_from_value(value)
+            else:
+                config[field] = str(value)
+            i += 2
+            continue
+        if key in STARTUP_BOOL_KEYS:
+            field, value = STARTUP_BOOL_KEYS[key]
+            config[field] = value
+            i += 1
+            continue
+        unknown.append(token)
+        if token.startswith(("+", "-")):
+            flags.append(token)
+        i += 1
+    config["customParams"] = startup_command_from_tokens(unknown)
+    config["additionalFlags"] = []
+    return {"config": config, "prefix": prefix, "unknown": unknown, "additionalFlags": flags}
+
+def normalize_config(raw):
+    config = default_startup_config()
+    if isinstance(raw, dict):
+        config.update(raw)
+    for key in ["console", "usercon", "vac", "hltv", "autoRestart"]:
+        config[key] = bool_from_value(config.get(key))
+    if not isinstance(config.get("additionalFlags"), list):
+        config["additionalFlags"] = tokenize_startup_command(str(config.get("additionalFlags") or ""))
+    else:
+        config["additionalFlags"] = [str(x).strip() for x in config["additionalFlags"] if str(x).strip()]
+    config["customParams"] = str(config.get("customParams") or "").strip()
+    return config
+
+def validate_startup_config(config):
+    def optional_int(field, label, minimum, maximum):
+        value = str(config.get(field) or "").strip()
+        if not value:
+            return
+        if not value.isdigit():
+            raise ValueError(f"{label} deve ser numerico")
+        number = int(value)
+        if number < minimum or number > maximum:
+            raise ValueError(f"{label} deve ficar entre {minimum} e {maximum}")
+
+    optional_int("port", "Porta", 1, 65535)
+    optional_int("maxPlayers", "Maximo de players", 1, 128)
+    optional_int("gameMode", "Game mode", 0, 99)
+    optional_int("gameType", "Game type", 0, 99)
+    optional_int("tickrate", "Tickrate", 1, 1000)
+    optional_int("svLan", "sv_lan", 0, 1)
+    optional_int("region", "Regiao", 0, 255)
+    ip = str(config.get("ip") or "").strip()
+    if ip and ip not in ("*", "localhost"):
+        parts = ip.split(".")
+        if len(parts) != 4 or any(not p.isdigit() or int(p) < 0 or int(p) > 255 for p in parts):
+            raise ValueError("IP bind invalido")
+
+def filter_managed_tokens(tokens):
+    result = []
+    i = 0
+    while i < len(tokens):
+        key = tokens[i].lower()
+        if key in STARTUP_VALUE_KEYS:
+            i += 2
+            continue
+        if key in STARTUP_BOOL_KEYS:
+            i += 1
+            continue
+        result.append(tokens[i])
+        i += 1
+    return result
+
+def build_startup_command(config, prefix, path):
+    config = normalize_config(config)
+    tokens = list(prefix or default_startup_prefix(path))
+    for item in STARTUP_ORDER:
+        if item[0] == "bool":
+            _, flag, field, expected = item
+            if bool_from_value(config.get(field)) == expected:
+                tokens.append(flag)
+            continue
+        _, flag, field = item
+        value = config.get(field)
+        if field == "hltv":
+            tokens.extend([flag, "1" if bool_from_value(value) else "0"])
+            continue
+        value = value_to_token(value)
+        if value:
+            tokens.extend([flag, value])
+    extra = []
+    extra.extend(config.get("additionalFlags") or [])
+    if config.get("customParams"):
+        extra.extend(tokenize_startup_command(config["customParams"]))
+    deduped_extra = []
+    for token in extra:
+        if token not in deduped_extra:
+            deduped_extra.append(token)
+    extra = deduped_extra
+    tokens.extend(filter_managed_tokens(extra))
+    return startup_command_from_tokens(tokens)
+
+def load_startup_config(path=None):
+    startup_path = os.path.abspath(path or find_startup_file())
+    if not startup_path_allowed(startup_path):
+        raise PermissionError("Arquivo de inicializacao fora dos diretorios permitidos")
+    exists = os.path.exists(startup_path)
+    raw = ""
+    if exists:
+        with open(startup_path, "r", encoding="utf-8", errors="replace") as f:
+            raw = f.read()
+    command, line_index = extract_startup_command(raw)
+    if not command:
+        command = startup_command_from_tokens(default_startup_prefix(startup_path))
+    parsed = parse_startup_tokens(tokenize_startup_command(command), startup_path)
+    preview = build_startup_command(parsed["config"], parsed["prefix"], startup_path)
+    return {
+        "path": startup_path,
+        "exists": exists,
+        "lineIndex": line_index,
+        "raw": raw,
+        "command": command,
+        "generatedCommand": preview,
+        "config": parsed["config"],
+        "prefix": parsed["prefix"],
+        "unknownParams": parsed["unknown"],
+        "backupPath": None,
+    }
+
+def save_startup_config(body):
+    startup_path = os.path.abspath(body.get("path") or find_startup_file())
+    if not startup_path_allowed(startup_path):
+        raise PermissionError("Arquivo de inicializacao fora dos diretorios permitidos")
+    current = load_startup_config(startup_path)
+    config = normalize_config(body.get("config") or {})
+    validate_startup_config(config)
+    command = build_startup_command(config, current.get("prefix") or default_startup_prefix(startup_path), startup_path)
+    backup_path = None
+    raw = current.get("raw") or ""
+    if os.path.exists(startup_path):
+        backup_path = startup_path + ".bak-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+        shutil.copy2(startup_path, backup_path)
+    os.makedirs(os.path.dirname(startup_path), exist_ok=True)
+    lines = raw.splitlines()
+    line_index = current.get("lineIndex", -1)
+    if line_index is not None and line_index >= 0 and line_index < len(lines):
+        lines[line_index] = command
+        new_raw = "\n".join(lines) + "\n"
+    elif raw.strip():
+        new_raw = raw.rstrip() + "\n" + command + "\n"
+    else:
+        new_raw = command + "\n"
+    with open(startup_path, "w", encoding="utf-8") as f:
+        f.write(new_raw)
+    if startup_path.lower().endswith(".sh"):
+        try:
+            os.chmod(startup_path, 0o755)
+        except Exception:
+            pass
+    saved = load_startup_config(startup_path)
+    saved["backupPath"] = backup_path
+    saved["message"] = "Arquivo de inicializacao salvo com backup." if backup_path else "Arquivo de inicializacao criado."
+    return saved
 
 def safe_plugin_id(plugin_id):
     name = os.path.basename(plugin_id.strip().strip("/\\"))
@@ -782,6 +1154,13 @@ class AgentHandler(BaseHTTPRequestHandler):
         if path == "/server/cstv/config":
             return self._send(200, load_cstv_cfg())
 
+        # /server/startup
+        if path == "/server/startup":
+            try:
+                return self._send(200, load_startup_config())
+            except Exception as e:
+                return self._send(500, {"success": False, "message": str(e)})
+
         self._send(404, {"error": "Not found"})
 
     # ── DELETE ─────────────────────────────────────────────────────────────────
@@ -886,6 +1265,16 @@ class AgentHandler(BaseHTTPRequestHandler):
             try:
                 response = rcon.send(cmd)
                 return self._send(200, {"success": True, "response": response})
+            except Exception as e:
+                return self._send(500, {"success": False, "message": str(e)})
+
+        # /server/startup
+        if path == "/server/startup":
+            try:
+                saved = save_startup_config(self._body())
+                return self._send(200, {"success": True, **saved})
+            except ValueError as e:
+                return self._send(400, {"success": False, "message": str(e)})
             except Exception as e:
                 return self._send(500, {"success": False, "message": str(e)})
 

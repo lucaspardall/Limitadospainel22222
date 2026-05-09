@@ -177,6 +177,27 @@ router.post("/servers/:serverId/update", authMiddleware, async (req: any, res: a
   return res.json(result);
 });
 
+// GET /api/servers/:serverId/startup
+router.get("/servers/:serverId/startup", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/startup", "GET");
+  if (!result.success) return res.status(502).json({ error: result.message || "Agent not reachable" });
+  return res.json(result.data ?? {});
+});
+
+// POST /api/servers/:serverId/startup
+router.post("/servers/:serverId/startup", authMiddleware, async (req: any, res: any) => {
+  const id = parseInt(req.params.serverId, 10);
+  const [s] = await db.select().from(serversTable).where(eq(serversTable.id, id)).limit(1);
+  if (!s) return res.status(404).json({ error: "Server not found" });
+  const result = await forwardToAgent(s.agentUrl, s.agentToken, "/server/startup", "POST", req.body);
+  await logActivity("rcon_command", "Startup do servidor atualizado", s.id, s.name, req.user?.userId, req.user?.username);
+  if (!result.success) return res.status(502).json({ error: result.message || "Agent not reachable" });
+  return res.json(result.data ?? result);
+});
+
 // POST /api/servers/:serverId/command
 router.post("/servers/:serverId/command", authMiddleware, async (req: any, res: any) => {
   const id = parseInt(req.params.serverId, 10);
