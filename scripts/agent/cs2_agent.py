@@ -98,13 +98,29 @@ class RCONClient:
         body = body.encode("utf-8") + b"\x00\x00"
         return struct.pack("<III", 4 + 4 + len(body), req_id, ptype) + body
 
+    def _decode_packets(self, data):
+        bodies = []
+        offset = 0
+        while offset + 4 <= len(data):
+            size = struct.unpack("<i", data[offset:offset + 4])[0]
+            end = offset + 4 + size
+            if size < 10 or end > len(data):
+                break
+            packet = data[offset + 4:end]
+            body = packet[8:-2]
+            if body:
+                bodies.append(body.decode("utf-8", errors="replace"))
+            offset = end
+        return "\n".join(bodies).strip()
+
     def send(self, command):
         s = socket.create_connection((self.host, self.port), timeout=self.timeout)
         try:
             s.sendall(self._packet(1, 3, self.password))
             s.recv(4096)
             s.sendall(self._packet(2, 2, command))
-            data, s.timeout = b"", 3
+            data = b""
+            s.settimeout(3)
             try:
                 while True:
                     chunk = s.recv(4096)
@@ -116,7 +132,8 @@ class RCONClient:
         finally:
             s.close()
         if len(data) >= 12:
-            return data[12:].rstrip(b"\x00").decode("utf-8", errors="replace")
+            decoded = self._decode_packets(data)
+            return decoded or data[12:].rstrip(b"\x00").decode("utf-8", errors="replace")
         return "OK"
 
 rcon = RCONClient(args.rcon_host, args.rcon_port, args.rcon_password)
